@@ -71,6 +71,160 @@ const examSchema = z.object({
   questions: z.array(questionSchema),
 });
 
+const typeMap: Record<string, "mcq" | "essay"> = {
+  mcq: "mcq",
+  multiple_choice: "mcq",
+  "multiple choice": "mcq",
+  "اختيار من متعدد": "mcq",
+  "اختيار متعدد": "mcq",
+  essay: "essay",
+  "مقال": "essay",
+  "مقالي": "essay",
+  "مقالية": "essay",
+};
+
+const difficultyMap: Record<string, "easy" | "medium" | "hard"> = {
+  easy: "easy",
+  "سهل": "easy",
+  "سهلة": "easy",
+  medium: "medium",
+  "متوسط": "medium",
+  "متوسطة": "medium",
+  hard: "hard",
+  "صعب": "hard",
+  "صعبة": "hard",
+};
+
+function extractJsonValue(raw: string) {
+  const cleaned = raw
+    .replace(/```json\s*/gi, "")
+    .replace(/```/g, "")
+    .trim();
+
+  let start = -1;
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+
+  for (let i = 0; i < cleaned.length; i += 1) {
+    const char = cleaned[i];
+
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+
+    if (char === "\\") {
+      escaped = true;
+      continue;
+    }
+
+    if (char === '"') {
+      inString = !inString;
+      continue;
+    }
+
+    if (inString) continue;
+
+    if ((char === "{" || char === "[") && start === -1) {
+      start = i;
+      depth = 1;
+      continue;
+    }
+
+    if (start === -1) continue;
+
+    if (char === "{" || char === "[") depth += 1;
+    if (char === "}" || char === "]") depth -= 1;
+
+    if (start !== -1 && depth === 0) {
+      return JSON.parse(cleaned.slice(start, i + 1));
+    }
+  }
+
+  throw new Error("NO_JSON_FOUND");
+}
+
+function normalizeOptions(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value.map((item) => String(item).trim()).filter(Boolean);
+  }
+
+  if (typeof value === "string") {
+    return value
+      .split(/\n|•|-|(?:^|\s)[A-Dأبجده]\s*[\).:-]/)
+      .map((item) => item.trim())
+      .filter(Boolean);
+  }
+
+  return [];
+}
+
+function normalizeCorrectAnswer(value: unknown, options: string[]) {
+  const answer = String(value ?? "").trim();
+  const answerIndexMap: Record<string, number> = {
+    A: 0,
+    B: 1,
+    C: 2,
+    D: 3,
+    "1": 0,
+    "2": 1,
+    "3": 2,
+    "4": 3,
+    "أ": 0,
+    "ب": 1,
+    "ج": 2,
+    "د": 3,
+  };
+
+  const mappedIndex = answerIndexMap[answer.toUpperCase()] ?? answerIndexMap[answer];
+  if (mappedIndex !== undefined && options[mappedIndex]) return options[mappedIndex];
+  return answer;
+}
+
+function normalizeExamPayload(payload: unknown) {
+  const rawQuestions = Array.isArray(payload)
+    ? payload
+    : Array.isArray((payload as any)?.questions)
+      ? (payload as any).questions
+      : Array.isArray((payload as any)?.items)
+        ? (payload as any).items
+        : Array.isArray((payload as any)?.exam?.questions)
+          ? (payload as any).exam.questions
+          : [];
+
+  const questions = rawQuestions
+    .map((question) => {
+      const options = normalizeOptions((question as any)?.options);
+      const typeKey = String((question as any)?.type ?? (question as any)?.question_type ?? "").trim().toLowerCase();
+      const difficultyKey = String((question as any)?.difficulty ?? (question as any)?.level ?? "").trim().toLowerCase();
+      const type = typeMap[typeKey];
+      const difficulty = difficultyMap[difficultyKey];
+      const correctAnswer = normalizeCorrectAnswer(
+        (question as any)?.correct_answer ?? (question as any)?.correctAnswer ?? (question as any)?.answer,
+        options,
+      );
+
+      return {
+        type,
+        difficulty,
+        question_text: String((question as any)?.question_text ?? (question as any)?.questionText ?? (question as any)?.question ?? "").trim(),
+        options: type === "essay" ? [] : options,
+        correct_answer: correctAnswer,
+        explanation: String((question as any)?.explanation ?? (question as any)?.reasoning ?? (question as any)?.rationale ?? "").trim(),
+        source_excerpt: String((question as any)?.source_excerpt ?? (question as any)?.sourceExcerpt ?? (question as any)?.excerpt ?? (question as any)?.reference ?? "").trim(),
+      };
+    })
+    .filter((question) => {
+      if (!question.type || !question.difficulty) return false;
+      if (!question.question_text || !question.correct_answer || !question.explanation || !question.source_excerpt) return false;
+      if (question.type === "mcq" && question.options.length < 2) return false;
+      return true;
+    });
+
+  return { questions };
+}
+
 export const generateExam = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => GenInput.parse(d))
