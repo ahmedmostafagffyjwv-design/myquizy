@@ -13,6 +13,7 @@ import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedWeakBankRouteImport } from './routes/_authenticated/weak-bank'
+import { Route as AuthenticatedStatsRouteImport } from './routes/_authenticated/stats'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
 import { Route as AuthenticatedExamsNewRouteImport } from './routes/_authenticated/exams.new'
 import { Route as AuthenticatedExamsHistoryRouteImport } from './routes/_authenticated/exams.history'
@@ -36,6 +37,11 @@ const IndexRoute = IndexRouteImport.update({
 const AuthenticatedWeakBankRoute = AuthenticatedWeakBankRouteImport.update({
   id: '/weak-bank',
   path: '/weak-bank',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedStatsRoute = AuthenticatedStatsRouteImport.update({
+  id: '/stats',
+  path: '/stats',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedDashboardRoute = AuthenticatedDashboardRouteImport.update({
@@ -70,6 +76,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
+  '/stats': typeof AuthenticatedStatsRoute
   '/weak-bank': typeof AuthenticatedWeakBankRoute
   '/exams/$id': typeof AuthenticatedExamsIdRouteWithChildren
   '/exams/history': typeof AuthenticatedExamsHistoryRoute
@@ -80,6 +87,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
+  '/stats': typeof AuthenticatedStatsRoute
   '/weak-bank': typeof AuthenticatedWeakBankRoute
   '/exams/$id': typeof AuthenticatedExamsIdRouteWithChildren
   '/exams/history': typeof AuthenticatedExamsHistoryRoute
@@ -92,6 +100,7 @@ export interface FileRoutesById {
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/auth': typeof AuthRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
+  '/_authenticated/stats': typeof AuthenticatedStatsRoute
   '/_authenticated/weak-bank': typeof AuthenticatedWeakBankRoute
   '/_authenticated/exams/$id': typeof AuthenticatedExamsIdRouteWithChildren
   '/_authenticated/exams/history': typeof AuthenticatedExamsHistoryRoute
@@ -104,6 +113,7 @@ export interface FileRouteTypes {
     | '/'
     | '/auth'
     | '/dashboard'
+    | '/stats'
     | '/weak-bank'
     | '/exams/$id'
     | '/exams/history'
@@ -114,6 +124,7 @@ export interface FileRouteTypes {
     | '/'
     | '/auth'
     | '/dashboard'
+    | '/stats'
     | '/weak-bank'
     | '/exams/$id'
     | '/exams/history'
@@ -125,6 +136,7 @@ export interface FileRouteTypes {
     | '/_authenticated'
     | '/auth'
     | '/_authenticated/dashboard'
+    | '/_authenticated/stats'
     | '/_authenticated/weak-bank'
     | '/_authenticated/exams/$id'
     | '/_authenticated/exams/history'
@@ -166,6 +178,13 @@ declare module '@tanstack/react-router' {
       path: '/weak-bank'
       fullPath: '/weak-bank'
       preLoaderRoute: typeof AuthenticatedWeakBankRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/stats': {
+      id: '/_authenticated/stats'
+      path: '/stats'
+      fullPath: '/stats'
+      preLoaderRoute: typeof AuthenticatedStatsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/dashboard': {
@@ -219,6 +238,7 @@ const AuthenticatedExamsIdRouteWithChildren =
 
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
+  AuthenticatedStatsRoute: typeof AuthenticatedStatsRoute
   AuthenticatedWeakBankRoute: typeof AuthenticatedWeakBankRoute
   AuthenticatedExamsIdRoute: typeof AuthenticatedExamsIdRouteWithChildren
   AuthenticatedExamsHistoryRoute: typeof AuthenticatedExamsHistoryRoute
@@ -227,6 +247,7 @@ interface AuthenticatedRouteRouteChildren {
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
+  AuthenticatedStatsRoute: AuthenticatedStatsRoute,
   AuthenticatedWeakBankRoute: AuthenticatedWeakBankRoute,
   AuthenticatedExamsIdRoute: AuthenticatedExamsIdRouteWithChildren,
   AuthenticatedExamsHistoryRoute: AuthenticatedExamsHistoryRoute,
