@@ -183,6 +183,16 @@ function normalizeCorrectAnswer(value: unknown, options: string[]) {
 }
 
 function normalizeExamPayload(payload: unknown) {
+  type NormalizedQuestion = {
+    type?: "mcq" | "essay";
+    difficulty?: "easy" | "medium" | "hard";
+    question_text: string;
+    options: string[];
+    correct_answer: string;
+    explanation: string;
+    source_excerpt: string;
+  };
+
   const rawQuestions = Array.isArray(payload)
     ? payload
     : Array.isArray((payload as any)?.questions)
@@ -194,7 +204,7 @@ function normalizeExamPayload(payload: unknown) {
           : [];
 
   const questions = rawQuestions
-    .map((question) => {
+    .map((question): NormalizedQuestion => {
       const options = normalizeOptions((question as any)?.options);
       const typeKey = String((question as any)?.type ?? (question as any)?.question_type ?? "").trim().toLowerCase();
       const difficultyKey = String((question as any)?.difficulty ?? (question as any)?.level ?? "").trim().toLowerCase();
@@ -215,7 +225,7 @@ function normalizeExamPayload(payload: unknown) {
         source_excerpt: String((question as any)?.source_excerpt ?? (question as any)?.sourceExcerpt ?? (question as any)?.excerpt ?? (question as any)?.reference ?? "").trim(),
       };
     })
-    .filter((question) => {
+    .filter((question: NormalizedQuestion) => {
       if (!question.type || !question.difficulty) return false;
       if (!question.question_text || !question.correct_answer || !question.explanation || !question.source_excerpt) return false;
       if (question.type === "mcq" && question.options.length < 2) return false;
@@ -239,7 +249,7 @@ export const generateExam = createServerFn({ method: "POST" })
       .single();
     if (srcErr || !src) throw new Error("لم يتم العثور على المصدر");
 
-    const content = (src.content || "").slice(0, 60000); // cap to keep prompt sane
+    const content = (src.content || "").slice(0, 30000); // cap to reduce latency/truncation risk
 
     const difficultyAr =
       data.difficulty === "easy" ? "سهلة"
@@ -287,55 +297,43 @@ ${content}
 }
 للأسئلة المقالية اجعل options مصفوفة فارغة [].`;
 
-    let raw = "";
-    try {
-      const { text } = await generateText({
-        model: gateway(MODEL),
-        system: systemPrompt + jsonInstruction,
-        prompt: userPrompt,
-      });
-      raw = text;
-    } catch (e: any) {
-      const msg = String(e?.message || e);
-      if (msg.includes("429")) throw new Error("تم تجاوز الحد المسموح من الطلبات. حاول لاحقًا.");
-      if (msg.includes("402")) throw new Error("نفدت رصيد الذكاء الاصطناعي. يرجى ترقية الباقة.");
-      throw new Error("فشل توليد الأسئلة: " + msg);
+    let questions: z.infer<typeof questionSchema>[] = [];
+    let lastFailure = "";
+
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const retryInstruction = attempt === 0
+        ? ""
+        : `\n\nالمحاولة السابقة فشلت. أصلح الإخراج فقط. تذكير صارم: أعد JSON صالحًا فقط، واجعل type و difficulty بالإنجليزية فقط، ولا تضع أي نص خارج JSON.`;
+
+      try {
+        const { text } = await generateText({
+          model: gateway(MODEL),
+          system: systemPrompt + jsonInstruction,
+          prompt: userPrompt + retryInstruction,
+        });
+
+        const parsed = extractJsonValue(text);
+        const normalized = normalizeExamPayload(parsed);
+        const validation = examSchema.safeParse(normalized);
+
+        if (validation.success && validation.data.questions.length > 0) {
+          questions = validation.data.questions;
+          break;
+        }
+
+        lastFailure = "استجابة النموذج غير متوافقة مع الصيغة المطلوبة.";
+      } catch (e: any) {
+        const msg = String(e?.message || e);
+        if (msg.includes("429")) throw new Error("تم تجاوز الحد المسموح من الطلبات. حاول لاحقًا.");
+        if (msg.includes("402")) throw new Error("نفدت رصيد الذكاء الاصطناعي. يرجى ترقية الباقة.");
+        if (msg === "NO_JSON_FOUND") {
+          lastFailure = "تعذر استخراج JSON صالح من استجابة النموذج.";
+          continue;
+        }
+        lastFailure = msg;
+      }
     }
 
-    // Extract JSON from response (strip code fences / surrounding text)
-    let jsonText = raw.trim();
-    const fenceMatch = jsonText.match(/```(?:json)?\s*([\s\S]*?)```/);
-    if (fenceMatch) jsonText = fenceMatch[1].trim();
-    const firstBrace = jsonText.indexOf("{");
-    const lastBrace = jsonText.lastIndexOf("}");
-    if (firstBrace !== -1 && lastBrace !== -1) {
-      jsonText = jsonText.slice(firstBrace, lastBrace + 1);
-    }
-
-    let parsed: any;
-    try {
-      parsed = JSON.parse(jsonText);
-    } catch {
-      throw new Error("فشل تحليل استجابة النموذج. حاول مرة أخرى.");
-    }
-
-    const looseSchema = z.object({
-      questions: z.array(z.object({
-        type: z.enum(["mcq", "essay"]),
-        difficulty: z.enum(["easy", "medium", "hard"]),
-        question_text: z.string(),
-        options: z.array(z.string()).nullish(),
-        correct_answer: z.string(),
-        explanation: z.string(),
-        source_excerpt: z.string(),
-      })),
-    });
-
-    const validation = looseSchema.safeParse(parsed);
-    if (!validation.success) {
-      throw new Error("استجابة النموذج غير متوافقة مع الصيغة المطلوبة. حاول مرة أخرى.");
-    }
-    const questions = validation.data.questions;
     if (!questions.length) throw new Error("لم يتمكن النموذج من توليد أي سؤال من هذا المصدر");
 
     // Create exam
