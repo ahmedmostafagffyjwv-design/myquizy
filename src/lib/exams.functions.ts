@@ -71,6 +71,170 @@ const examSchema = z.object({
   questions: z.array(questionSchema),
 });
 
+const typeMap: Record<string, "mcq" | "essay"> = {
+  mcq: "mcq",
+  multiple_choice: "mcq",
+  "multiple choice": "mcq",
+  "اختيار من متعدد": "mcq",
+  "اختيار متعدد": "mcq",
+  essay: "essay",
+  "مقال": "essay",
+  "مقالي": "essay",
+  "مقالية": "essay",
+};
+
+const difficultyMap: Record<string, "easy" | "medium" | "hard"> = {
+  easy: "easy",
+  "سهل": "easy",
+  "سهلة": "easy",
+  medium: "medium",
+  "متوسط": "medium",
+  "متوسطة": "medium",
+  hard: "hard",
+  "صعب": "hard",
+  "صعبة": "hard",
+};
+
+function extractJsonValue(raw: string) {
+  const cleaned = raw
+    .replace(/```json\s*/gi, "")
+    .replace(/```/g, "")
+    .trim();
+
+  let start = -1;
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+
+  for (let i = 0; i < cleaned.length; i += 1) {
+    const char = cleaned[i];
+
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+
+    if (char === "\\") {
+      escaped = true;
+      continue;
+    }
+
+    if (char === '"') {
+      inString = !inString;
+      continue;
+    }
+
+    if (inString) continue;
+
+    if ((char === "{" || char === "[") && start === -1) {
+      start = i;
+      depth = 1;
+      continue;
+    }
+
+    if (start === -1) continue;
+
+    if (char === "{" || char === "[") depth += 1;
+    if (char === "}" || char === "]") depth -= 1;
+
+    if (start !== -1 && depth === 0) {
+      return JSON.parse(cleaned.slice(start, i + 1));
+    }
+  }
+
+  throw new Error("NO_JSON_FOUND");
+}
+
+function normalizeOptions(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value.map((item) => String(item).trim()).filter(Boolean);
+  }
+
+  if (typeof value === "string") {
+    return value
+      .split(/\n|•|-|(?:^|\s)[A-Dأبجده]\s*[\).:-]/)
+      .map((item) => item.trim())
+      .filter(Boolean);
+  }
+
+  return [];
+}
+
+function normalizeCorrectAnswer(value: unknown, options: string[]) {
+  const answer = String(value ?? "").trim();
+  const answerIndexMap: Record<string, number> = {
+    A: 0,
+    B: 1,
+    C: 2,
+    D: 3,
+    "1": 0,
+    "2": 1,
+    "3": 2,
+    "4": 3,
+    "أ": 0,
+    "ب": 1,
+    "ج": 2,
+    "د": 3,
+  };
+
+  const mappedIndex = answerIndexMap[answer.toUpperCase()] ?? answerIndexMap[answer];
+  if (mappedIndex !== undefined && options[mappedIndex]) return options[mappedIndex];
+  return answer;
+}
+
+function normalizeExamPayload(payload: unknown) {
+  type NormalizedQuestion = {
+    type?: "mcq" | "essay";
+    difficulty?: "easy" | "medium" | "hard";
+    question_text: string;
+    options: string[];
+    correct_answer: string;
+    explanation: string;
+    source_excerpt: string;
+  };
+
+  const rawQuestions = Array.isArray(payload)
+    ? payload
+    : Array.isArray((payload as any)?.questions)
+      ? (payload as any).questions
+      : Array.isArray((payload as any)?.items)
+        ? (payload as any).items
+        : Array.isArray((payload as any)?.exam?.questions)
+          ? (payload as any).exam.questions
+          : [];
+
+  const questions = rawQuestions
+    .map((question: any): NormalizedQuestion => {
+      const options = normalizeOptions((question as any)?.options);
+      const typeKey = String((question as any)?.type ?? (question as any)?.question_type ?? "").trim().toLowerCase();
+      const difficultyKey = String((question as any)?.difficulty ?? (question as any)?.level ?? "").trim().toLowerCase();
+      const type = typeMap[typeKey];
+      const difficulty = difficultyMap[difficultyKey];
+      const correctAnswer = normalizeCorrectAnswer(
+        (question as any)?.correct_answer ?? (question as any)?.correctAnswer ?? (question as any)?.answer,
+        options,
+      );
+
+      return {
+        type,
+        difficulty,
+        question_text: String((question as any)?.question_text ?? (question as any)?.questionText ?? (question as any)?.question ?? "").trim(),
+        options: type === "essay" ? [] : options,
+        correct_answer: correctAnswer,
+        explanation: String((question as any)?.explanation ?? (question as any)?.reasoning ?? (question as any)?.rationale ?? "").trim(),
+        source_excerpt: String((question as any)?.source_excerpt ?? (question as any)?.sourceExcerpt ?? (question as any)?.excerpt ?? (question as any)?.reference ?? "").trim(),
+      };
+    })
+    .filter((question: NormalizedQuestion) => {
+      if (!question.type || !question.difficulty) return false;
+      if (!question.question_text || !question.correct_answer || !question.explanation || !question.source_excerpt) return false;
+      if (question.type === "mcq" && question.options.length < 2) return false;
+      return true;
+    });
+
+  return { questions };
+}
+
 export const generateExam = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => GenInput.parse(d))
@@ -85,7 +249,7 @@ export const generateExam = createServerFn({ method: "POST" })
       .single();
     if (srcErr || !src) throw new Error("لم يتم العثور على المصدر");
 
-    const content = (src.content || "").slice(0, 60000); // cap to keep prompt sane
+    const content = (src.content || "").slice(0, 30000); // cap to reduce latency/truncation risk
 
     const difficultyAr =
       data.difficulty === "easy" ? "سهلة"
@@ -133,55 +297,43 @@ ${content}
 }
 للأسئلة المقالية اجعل options مصفوفة فارغة [].`;
 
-    let raw = "";
-    try {
-      const { text } = await generateText({
-        model: gateway(MODEL),
-        system: systemPrompt + jsonInstruction,
-        prompt: userPrompt,
-      });
-      raw = text;
-    } catch (e: any) {
-      const msg = String(e?.message || e);
-      if (msg.includes("429")) throw new Error("تم تجاوز الحد المسموح من الطلبات. حاول لاحقًا.");
-      if (msg.includes("402")) throw new Error("نفدت رصيد الذكاء الاصطناعي. يرجى ترقية الباقة.");
-      throw new Error("فشل توليد الأسئلة: " + msg);
+    let questions: z.infer<typeof questionSchema>[] = [];
+    let lastFailure = "";
+
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const retryInstruction = attempt === 0
+        ? ""
+        : `\n\nالمحاولة السابقة فشلت. أصلح الإخراج فقط. تذكير صارم: أعد JSON صالحًا فقط، واجعل type و difficulty بالإنجليزية فقط، ولا تضع أي نص خارج JSON.`;
+
+      try {
+        const { text } = await generateText({
+          model: gateway(MODEL),
+          system: systemPrompt + jsonInstruction,
+          prompt: userPrompt + retryInstruction,
+        });
+
+        const parsed = extractJsonValue(text);
+        const normalized = normalizeExamPayload(parsed);
+        const validation = examSchema.safeParse(normalized);
+
+        if (validation.success && validation.data.questions.length > 0) {
+          questions = validation.data.questions;
+          break;
+        }
+
+        lastFailure = "استجابة النموذج غير متوافقة مع الصيغة المطلوبة.";
+      } catch (e: any) {
+        const msg = String(e?.message || e);
+        if (msg.includes("429")) throw new Error("تم تجاوز الحد المسموح من الطلبات. حاول لاحقًا.");
+        if (msg.includes("402")) throw new Error("نفدت رصيد الذكاء الاصطناعي. يرجى ترقية الباقة.");
+        if (msg === "NO_JSON_FOUND") {
+          lastFailure = "تعذر استخراج JSON صالح من استجابة النموذج.";
+          continue;
+        }
+        lastFailure = msg;
+      }
     }
 
-    // Extract JSON from response (strip code fences / surrounding text)
-    let jsonText = raw.trim();
-    const fenceMatch = jsonText.match(/```(?:json)?\s*([\s\S]*?)```/);
-    if (fenceMatch) jsonText = fenceMatch[1].trim();
-    const firstBrace = jsonText.indexOf("{");
-    const lastBrace = jsonText.lastIndexOf("}");
-    if (firstBrace !== -1 && lastBrace !== -1) {
-      jsonText = jsonText.slice(firstBrace, lastBrace + 1);
-    }
-
-    let parsed: any;
-    try {
-      parsed = JSON.parse(jsonText);
-    } catch {
-      throw new Error("فشل تحليل استجابة النموذج. حاول مرة أخرى.");
-    }
-
-    const looseSchema = z.object({
-      questions: z.array(z.object({
-        type: z.enum(["mcq", "essay"]),
-        difficulty: z.enum(["easy", "medium", "hard"]),
-        question_text: z.string(),
-        options: z.array(z.string()).nullish(),
-        correct_answer: z.string(),
-        explanation: z.string(),
-        source_excerpt: z.string(),
-      })),
-    });
-
-    const validation = looseSchema.safeParse(parsed);
-    if (!validation.success) {
-      throw new Error("استجابة النموذج غير متوافقة مع الصيغة المطلوبة. حاول مرة أخرى.");
-    }
-    const questions = validation.data.questions;
     if (!questions.length) throw new Error("لم يتمكن النموذج من توليد أي سؤال من هذا المصدر");
 
     // Create exam
