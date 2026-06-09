@@ -14,6 +14,7 @@ import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
 import { Route as AuthenticatedExamsNewRouteImport } from './routes/_authenticated/exams.new'
+import { Route as AuthenticatedExamsHistoryRouteImport } from './routes/_authenticated/exams.history'
 import { Route as AuthenticatedExamsIdRouteImport } from './routes/_authenticated/exams.$id'
 import { Route as AuthenticatedExamsIdResultsRouteImport } from './routes/_authenticated/exams.$id.results'
 
@@ -41,6 +42,12 @@ const AuthenticatedExamsNewRoute = AuthenticatedExamsNewRouteImport.update({
   path: '/exams/new',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedExamsHistoryRoute =
+  AuthenticatedExamsHistoryRouteImport.update({
+    id: '/exams/history',
+    path: '/exams/history',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedExamsIdRoute = AuthenticatedExamsIdRouteImport.update({
   id: '/exams/$id',
   path: '/exams/$id',
@@ -58,6 +65,7 @@ export interface FileRoutesByFullPath {
   '/auth': typeof AuthRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/exams/$id': typeof AuthenticatedExamsIdRouteWithChildren
+  '/exams/history': typeof AuthenticatedExamsHistoryRoute
   '/exams/new': typeof AuthenticatedExamsNewRoute
   '/exams/$id/results': typeof AuthenticatedExamsIdResultsRoute
 }
@@ -66,6 +74,7 @@ export interface FileRoutesByTo {
   '/auth': typeof AuthRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/exams/$id': typeof AuthenticatedExamsIdRouteWithChildren
+  '/exams/history': typeof AuthenticatedExamsHistoryRoute
   '/exams/new': typeof AuthenticatedExamsNewRoute
   '/exams/$id/results': typeof AuthenticatedExamsIdResultsRoute
 }
@@ -76,6 +85,7 @@ export interface FileRoutesById {
   '/auth': typeof AuthRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
   '/_authenticated/exams/$id': typeof AuthenticatedExamsIdRouteWithChildren
+  '/_authenticated/exams/history': typeof AuthenticatedExamsHistoryRoute
   '/_authenticated/exams/new': typeof AuthenticatedExamsNewRoute
   '/_authenticated/exams/$id/results': typeof AuthenticatedExamsIdResultsRoute
 }
@@ -86,6 +96,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/dashboard'
     | '/exams/$id'
+    | '/exams/history'
     | '/exams/new'
     | '/exams/$id/results'
   fileRoutesByTo: FileRoutesByTo
@@ -94,6 +105,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/dashboard'
     | '/exams/$id'
+    | '/exams/history'
     | '/exams/new'
     | '/exams/$id/results'
   id:
@@ -103,6 +115,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/_authenticated/dashboard'
     | '/_authenticated/exams/$id'
+    | '/_authenticated/exams/history'
     | '/_authenticated/exams/new'
     | '/_authenticated/exams/$id/results'
   fileRoutesById: FileRoutesById
@@ -150,6 +163,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedExamsNewRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/exams/history': {
+      id: '/_authenticated/exams/history'
+      path: '/exams/history'
+      fullPath: '/exams/history'
+      preLoaderRoute: typeof AuthenticatedExamsHistoryRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/exams/$id': {
       id: '/_authenticated/exams/$id'
       path: '/exams/$id'
@@ -181,12 +201,14 @@ const AuthenticatedExamsIdRouteWithChildren =
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
   AuthenticatedExamsIdRoute: typeof AuthenticatedExamsIdRouteWithChildren
+  AuthenticatedExamsHistoryRoute: typeof AuthenticatedExamsHistoryRoute
   AuthenticatedExamsNewRoute: typeof AuthenticatedExamsNewRoute
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
   AuthenticatedExamsIdRoute: AuthenticatedExamsIdRouteWithChildren,
+  AuthenticatedExamsHistoryRoute: AuthenticatedExamsHistoryRoute,
   AuthenticatedExamsNewRoute: AuthenticatedExamsNewRoute,
 }
 
