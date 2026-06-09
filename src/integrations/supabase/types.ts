@@ -14,7 +14,277 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      attempts: {
+        Row: {
+          ai_feedback: string | null
+          created_at: string
+          exam_id: string
+          id: string
+          is_correct: boolean | null
+          question_id: string
+          score: number | null
+          user_answer: string | null
+          user_id: string
+        }
+        Insert: {
+          ai_feedback?: string | null
+          created_at?: string
+          exam_id: string
+          id?: string
+          is_correct?: boolean | null
+          question_id: string
+          score?: number | null
+          user_answer?: string | null
+          user_id: string
+        }
+        Update: {
+          ai_feedback?: string | null
+          created_at?: string
+          exam_id?: string
+          id?: string
+          is_correct?: boolean | null
+          question_id?: string
+          score?: number | null
+          user_answer?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "attempts_exam_id_fkey"
+            columns: ["exam_id"]
+            isOneToOne: false
+            referencedRelation: "exams"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "attempts_question_id_fkey"
+            columns: ["question_id"]
+            isOneToOne: false
+            referencedRelation: "questions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      exams: {
+        Row: {
+          completed_at: string | null
+          created_at: string
+          difficulty: string
+          duration_minutes: number
+          id: string
+          is_retraining: boolean
+          question_count: number
+          question_type: string
+          score: number | null
+          source_id: string | null
+          started_at: string | null
+          status: string
+          title: string
+          user_id: string
+        }
+        Insert: {
+          completed_at?: string | null
+          created_at?: string
+          difficulty: string
+          duration_minutes: number
+          id?: string
+          is_retraining?: boolean
+          question_count: number
+          question_type: string
+          score?: number | null
+          source_id?: string | null
+          started_at?: string | null
+          status?: string
+          title: string
+          user_id: string
+        }
+        Update: {
+          completed_at?: string | null
+          created_at?: string
+          difficulty?: string
+          duration_minutes?: number
+          id?: string
+          is_retraining?: boolean
+          question_count?: number
+          question_type?: string
+          score?: number | null
+          source_id?: string | null
+          started_at?: string | null
+          status?: string
+          title?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "exams_source_id_fkey"
+            columns: ["source_id"]
+            isOneToOne: false
+            referencedRelation: "sources"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      profiles: {
+        Row: {
+          avatar_url: string | null
+          created_at: string
+          display_name: string | null
+          id: string
+          updated_at: string
+        }
+        Insert: {
+          avatar_url?: string | null
+          created_at?: string
+          display_name?: string | null
+          id: string
+          updated_at?: string
+        }
+        Update: {
+          avatar_url?: string | null
+          created_at?: string
+          display_name?: string | null
+          id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      questions: {
+        Row: {
+          correct_answer: string
+          created_at: string
+          difficulty: string
+          exam_id: string
+          explanation: string | null
+          id: string
+          image_url: string | null
+          options: Json | null
+          position: number
+          question_text: string
+          source_excerpt: string | null
+          type: string
+          user_id: string
+        }
+        Insert: {
+          correct_answer: string
+          created_at?: string
+          difficulty: string
+          exam_id: string
+          explanation?: string | null
+          id?: string
+          image_url?: string | null
+          options?: Json | null
+          position: number
+          question_text: string
+          source_excerpt?: string | null
+          type: string
+          user_id: string
+        }
+        Update: {
+          correct_answer?: string
+          created_at?: string
+          difficulty?: string
+          exam_id?: string
+          explanation?: string | null
+          id?: string
+          image_url?: string | null
+          options?: Json | null
+          position?: number
+          question_text?: string
+          source_excerpt?: string | null
+          type?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "questions_exam_id_fkey"
+            columns: ["exam_id"]
+            isOneToOne: false
+            referencedRelation: "exams"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      sources: {
+        Row: {
+          char_count: number
+          content: string
+          created_at: string
+          file_name: string | null
+          id: string
+          title: string
+          user_id: string
+        }
+        Insert: {
+          char_count?: number
+          content: string
+          created_at?: string
+          file_name?: string | null
+          id?: string
+          title: string
+          user_id: string
+        }
+        Update: {
+          char_count?: number
+          content?: string
+          created_at?: string
+          file_name?: string | null
+          id?: string
+          title?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      weak_questions: {
+        Row: {
+          created_at: string
+          id: string
+          last_attempt_at: string
+          mastered: boolean
+          question_id: string
+          source_id: string | null
+          times_correct: number
+          times_wrong: number
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          last_attempt_at?: string
+          mastered?: boolean
+          question_id: string
+          source_id?: string | null
+          times_correct?: number
+          times_wrong?: number
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          last_attempt_at?: string
+          mastered?: boolean
+          question_id?: string
+          source_id?: string | null
+          times_correct?: number
+          times_wrong?: number
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "weak_questions_question_id_fkey"
+            columns: ["question_id"]
+            isOneToOne: false
+            referencedRelation: "questions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "weak_questions_source_id_fkey"
+            columns: ["source_id"]
+            isOneToOne: false
+            referencedRelation: "sources"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
