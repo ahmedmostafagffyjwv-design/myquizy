@@ -4,8 +4,7 @@
 
 @custom-variant dark (&:is(.dark *));
 
-/* Arabic font */
-@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;500;600;700&family=Cairo:wght@400;500;600;700;800&display=swap');
+/* Arabic font loaded via <link> in __root.tsx */
 
 @theme inline {
   --font-sans: 'Cairo', 'IBM Plex Sans Arabic', system-ui, sans-serif;
