@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AuthenticatedWeakBankRouteImport } from './routes/_authenticated/weak-bank'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
 import { Route as AuthenticatedExamsNewRouteImport } from './routes/_authenticated/exams.new'
 import { Route as AuthenticatedExamsHistoryRouteImport } from './routes/_authenticated/exams.history'
@@ -31,6 +32,11 @@ const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
+} as any)
+const AuthenticatedWeakBankRoute = AuthenticatedWeakBankRouteImport.update({
+  id: '/weak-bank',
+  path: '/weak-bank',
+  getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedDashboardRoute = AuthenticatedDashboardRouteImport.update({
   id: '/dashboard',
@@ -64,6 +70,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
+  '/weak-bank': typeof AuthenticatedWeakBankRoute
   '/exams/$id': typeof AuthenticatedExamsIdRouteWithChildren
   '/exams/history': typeof AuthenticatedExamsHistoryRoute
   '/exams/new': typeof AuthenticatedExamsNewRoute
@@ -73,6 +80,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
+  '/weak-bank': typeof AuthenticatedWeakBankRoute
   '/exams/$id': typeof AuthenticatedExamsIdRouteWithChildren
   '/exams/history': typeof AuthenticatedExamsHistoryRoute
   '/exams/new': typeof AuthenticatedExamsNewRoute
@@ -84,6 +92,7 @@ export interface FileRoutesById {
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/auth': typeof AuthRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
+  '/_authenticated/weak-bank': typeof AuthenticatedWeakBankRoute
   '/_authenticated/exams/$id': typeof AuthenticatedExamsIdRouteWithChildren
   '/_authenticated/exams/history': typeof AuthenticatedExamsHistoryRoute
   '/_authenticated/exams/new': typeof AuthenticatedExamsNewRoute
@@ -95,6 +104,7 @@ export interface FileRouteTypes {
     | '/'
     | '/auth'
     | '/dashboard'
+    | '/weak-bank'
     | '/exams/$id'
     | '/exams/history'
     | '/exams/new'
@@ -104,6 +114,7 @@ export interface FileRouteTypes {
     | '/'
     | '/auth'
     | '/dashboard'
+    | '/weak-bank'
     | '/exams/$id'
     | '/exams/history'
     | '/exams/new'
@@ -114,6 +125,7 @@ export interface FileRouteTypes {
     | '/_authenticated'
     | '/auth'
     | '/_authenticated/dashboard'
+    | '/_authenticated/weak-bank'
     | '/_authenticated/exams/$id'
     | '/_authenticated/exams/history'
     | '/_authenticated/exams/new'
@@ -148,6 +160,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/_authenticated/weak-bank': {
+      id: '/_authenticated/weak-bank'
+      path: '/weak-bank'
+      fullPath: '/weak-bank'
+      preLoaderRoute: typeof AuthenticatedWeakBankRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/dashboard': {
       id: '/_authenticated/dashboard'
@@ -200,6 +219,7 @@ const AuthenticatedExamsIdRouteWithChildren =
 
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
+  AuthenticatedWeakBankRoute: typeof AuthenticatedWeakBankRoute
   AuthenticatedExamsIdRoute: typeof AuthenticatedExamsIdRouteWithChildren
   AuthenticatedExamsHistoryRoute: typeof AuthenticatedExamsHistoryRoute
   AuthenticatedExamsNewRoute: typeof AuthenticatedExamsNewRoute
@@ -207,6 +227,7 @@ interface AuthenticatedRouteRouteChildren {
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
+  AuthenticatedWeakBankRoute: AuthenticatedWeakBankRoute,
   AuthenticatedExamsIdRoute: AuthenticatedExamsIdRouteWithChildren,
   AuthenticatedExamsHistoryRoute: AuthenticatedExamsHistoryRoute,
   AuthenticatedExamsNewRoute: AuthenticatedExamsNewRoute,
