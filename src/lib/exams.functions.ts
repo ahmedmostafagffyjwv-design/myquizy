@@ -204,7 +204,7 @@ function normalizeExamPayload(payload: unknown) {
           : [];
 
   const questions = rawQuestions
-    .map((question): NormalizedQuestion => {
+    .map((question: any): NormalizedQuestion => {
       const options = normalizeOptions((question as any)?.options);
       const typeKey = String((question as any)?.type ?? (question as any)?.question_type ?? "").trim().toLowerCase();
       const difficultyKey = String((question as any)?.difficulty ?? (question as any)?.level ?? "").trim().toLowerCase();
