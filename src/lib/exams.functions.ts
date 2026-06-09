@@ -210,7 +210,7 @@ ${content}
       type: q.type,
       difficulty: q.difficulty,
       question_text: q.question_text,
-      options: q.options ?? null,
+      options: q.options && q.options.length ? q.options : null,
       correct_answer: q.correct_answer,
       explanation: q.explanation,
       source_excerpt: q.source_excerpt,
