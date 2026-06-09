@@ -117,14 +117,30 @@ ${content}
 """`;
 
     const gateway = getGateway();
-    let result;
+    const jsonInstruction = `\n\nأرجع **فقط** كائن JSON صالح بالشكل التالي بدون أي نص إضافي أو علامات code fence:
+{
+  "questions": [
+    {
+      "type": "mcq" | "essay",
+      "difficulty": "easy" | "medium" | "hard",
+      "question_text": "...",
+      "options": ["...", "...", "...", "..."],
+      "correct_answer": "...",
+      "explanation": "...",
+      "source_excerpt": "..."
+    }
+  ]
+}
+للأسئلة المقالية اجعل options مصفوفة فارغة [].`;
+
+    let raw = "";
     try {
-      result = await generateObject({
+      const { text } = await generateText({
         model: gateway(MODEL),
-        schema: examSchema,
-        system: systemPrompt,
+        system: systemPrompt + jsonInstruction,
         prompt: userPrompt,
       });
+      raw = text;
     } catch (e: any) {
       const msg = String(e?.message || e);
       if (msg.includes("429")) throw new Error("تم تجاوز الحد المسموح من الطلبات. حاول لاحقًا.");
@@ -132,7 +148,40 @@ ${content}
       throw new Error("فشل توليد الأسئلة: " + msg);
     }
 
-    const questions = result.object.questions;
+    // Extract JSON from response (strip code fences / surrounding text)
+    let jsonText = raw.trim();
+    const fenceMatch = jsonText.match(/```(?:json)?\s*([\s\S]*?)```/);
+    if (fenceMatch) jsonText = fenceMatch[1].trim();
+    const firstBrace = jsonText.indexOf("{");
+    const lastBrace = jsonText.lastIndexOf("}");
+    if (firstBrace !== -1 && lastBrace !== -1) {
+      jsonText = jsonText.slice(firstBrace, lastBrace + 1);
+    }
+
+    let parsed: any;
+    try {
+      parsed = JSON.parse(jsonText);
+    } catch {
+      throw new Error("فشل تحليل استجابة النموذج. حاول مرة أخرى.");
+    }
+
+    const looseSchema = z.object({
+      questions: z.array(z.object({
+        type: z.enum(["mcq", "essay"]),
+        difficulty: z.enum(["easy", "medium", "hard"]),
+        question_text: z.string(),
+        options: z.array(z.string()).nullish(),
+        correct_answer: z.string(),
+        explanation: z.string(),
+        source_excerpt: z.string(),
+      })),
+    });
+
+    const validation = looseSchema.safeParse(parsed);
+    if (!validation.success) {
+      throw new Error("استجابة النموذج غير متوافقة مع الصيغة المطلوبة. حاول مرة أخرى.");
+    }
+    const questions = validation.data.questions;
     if (!questions.length) throw new Error("لم يتمكن النموذج من توليد أي سؤال من هذا المصدر");
 
     // Create exam
