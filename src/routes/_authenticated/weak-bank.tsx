@@ -14,14 +14,14 @@ export const Route = createFileRoute("/_authenticated/weak-bank")({
   head: () => ({ meta: [{ title: "بنك الأخطاء — اختبرني" }] }),
   component: WeakBank,
 });
-  head: () => ({ meta: [{ title: "بنك الأخطاء — اختبرني" }] }),
-  component: WeakBank,
-});
 
 function WeakBank() {
   const navigate = useNavigate();
   const generate = useServerFn(generateExam);
+  const buildFromMistakes = useServerFn(buildExamFromMistakes);
   const [retraining, setRetraining] = useState(false);
+  const [buildingAll, setBuildingAll] = useState(false);
+
 
   const { data, isLoading } = useQuery({
     queryKey: ["weak-bank"],
