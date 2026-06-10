@@ -1,10 +1,14 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { CheckCircle2, XCircle, Trophy, RotateCcw, Home, Loader2 } from "lucide-react";
+import { CheckCircle2, XCircle, Trophy, RotateCcw, Home, Loader2, Sparkles } from "lucide-react";
 import { motion } from "framer-motion";
+import { useServerFn } from "@tanstack/react-start";
+import { buildExamFromMistakes } from "@/lib/attempts.functions";
+import { toast } from "sonner";
+import { useState } from "react";
 
 export const Route = createFileRoute("/_authenticated/exams/$id/results")({
   head: () => ({ meta: [{ title: "نتيجة الامتحان — اختبرني" }] }),
