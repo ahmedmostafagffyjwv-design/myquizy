@@ -2,12 +2,19 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import { motion } from "framer-motion";
 import { BookOpenCheck, Sparkles, Brain, Target, FileText, Trophy, RefreshCw } from "lucide-react";
+import ogImage from "@/assets/og-image.jpg";
 
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
       { title: "اختبرني — مولّد امتحانات ذكي من مصدرك" },
       { name: "description", content: "ارفع كتابك أو ملاحظاتك ودع الذكاء الاصطناعي يولّد لك امتحانات مخصصة مع تصحيح فوري وبنك أخطاء ذكي." },
+      { property: "og:title", content: "اختبرني — مولّد امتحانات ذكي من مصدرك" },
+      { property: "og:description", content: "امتحانات مخصصة من محتواك أنت، مع تصحيح فوري وبنك أخطاء ذكي." },
+      { property: "og:image", content: ogImage },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
+      { name: "twitter:image", content: ogImage },
     ],
   }),
   component: Landing,
@@ -33,35 +40,53 @@ function Landing() {
       </header>
 
       {/* hero */}
-      <section className="px-4 py-20 md:py-28">
-        <div className="max-w-4xl mx-auto text-center">
+      <section className="px-4 py-16 md:py-24">
+        <div className="max-w-6xl mx-auto grid md:grid-cols-2 gap-10 items-center">
           <motion.div
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6 }}
+            className="text-center md:text-right"
           >
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-accent text-accent-foreground text-xs font-medium mb-6">
               <Sparkles className="w-3.5 h-3.5" />
               مدعوم بالذكاء الاصطناعي
             </div>
-            <h1 className="text-4xl md:text-6xl font-bold tracking-tight mb-6 font-display leading-tight">
+            <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold tracking-tight mb-6 font-display leading-tight">
               امتحاناتك القادمة
               <br />
               <span className="bg-clip-text text-transparent" style={{ backgroundImage: "var(--gradient-primary)" }}>
                 مولّدة من مصدرك أنت
               </span>
             </h1>
-            <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto mb-10">
+            <p className="text-lg text-muted-foreground mb-8">
               ارفع كتابك، ملاحظاتك، أو حتى صورة من المحاضرة، واحصل على امتحان مخصّص خلال ثوانٍ —
               مع تصحيح ذكي وبنك أخطاء يعيد تدريبك على نقاط ضعفك.
             </p>
-            <div className="flex flex-wrap gap-3 justify-center">
+            <div className="flex flex-wrap gap-3 justify-center md:justify-start">
               <Link to="/auth">
                 <Button size="lg" className="text-base h-12 px-8" style={{ boxShadow: "var(--shadow-glow)" }}>
                   ابدأ امتحانك الأول
                 </Button>
               </Link>
             </div>
+          </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.7, delay: 0.1 }}
+            className="relative"
+          >
+            <div className="absolute inset-0 blur-3xl opacity-40" style={{ background: "var(--gradient-primary)" }} />
+            <img
+              src={ogImage}
+              alt="مولّد امتحانات ذكي من مصدرك التعليمي"
+              width={1200}
+              height={1200}
+              className="relative rounded-3xl border w-full h-auto"
+              style={{ boxShadow: "var(--shadow-soft)" }}
+            />
           </motion.div>
         </div>
       </section>
