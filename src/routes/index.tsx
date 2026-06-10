@@ -2,12 +2,19 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import { motion } from "framer-motion";
 import { BookOpenCheck, Sparkles, Brain, Target, FileText, Trophy, RefreshCw } from "lucide-react";
+import ogImage from "@/assets/og-image.jpg";
 
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
       { title: "اختبرني — مولّد امتحانات ذكي من مصدرك" },
       { name: "description", content: "ارفع كتابك أو ملاحظاتك ودع الذكاء الاصطناعي يولّد لك امتحانات مخصصة مع تصحيح فوري وبنك أخطاء ذكي." },
+      { property: "og:title", content: "اختبرني — مولّد امتحانات ذكي من مصدرك" },
+      { property: "og:description", content: "امتحانات مخصصة من محتواك أنت، مع تصحيح فوري وبنك أخطاء ذكي." },
+      { property: "og:image", content: ogImage },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
+      { name: "twitter:image", content: ogImage },
     ],
   }),
   component: Landing,
