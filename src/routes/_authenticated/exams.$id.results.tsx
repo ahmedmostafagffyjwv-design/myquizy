@@ -63,12 +63,18 @@ function Results() {
           <p className="text-primary-foreground/90 mt-2">
             {correctCount} صحيح من {data.questions.length}
           </p>
-          <div className="flex gap-2 justify-center mt-6">
+          <div className="flex gap-2 justify-center mt-6 flex-wrap">
             <Link to="/dashboard"><Button variant="secondary"><Home className="w-4 h-4 ml-1" /> الرئيسية</Button></Link>
             <Link to="/exams/new"><Button variant="secondary"><RotateCcw className="w-4 h-4 ml-1" /> امتحان جديد</Button></Link>
+            {data.attempts.some((a: any) => !a.is_correct) && (
+              <Button variant="secondary" onClick={retryMistakes} disabled={retrying}>
+                {retrying ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Sparkles className="w-4 h-4 ml-1" /> أعد اختبار الأخطاء</>}
+              </Button>
+            )}
           </div>
         </Card>
       </motion.div>
+
 
       <h2 className="text-xl font-bold">مراجعة الأسئلة</h2>
 
