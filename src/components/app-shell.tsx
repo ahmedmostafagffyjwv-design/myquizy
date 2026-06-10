@@ -52,6 +52,10 @@ export function AppShell({ children }: { children: ReactNode }) {
           ))}
         </nav>
         <div className="p-3 border-t border-sidebar-border space-y-1">
+          <Link to="/about" className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-sidebar-foreground hover:bg-sidebar-accent transition-colors">
+            <Info className="w-4 h-4" />
+            عن المشروع
+          </Link>
           <button onClick={toggle} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium hover:bg-sidebar-accent">
             {theme === "dark" ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
             {theme === "dark" ? "وضع نهاري" : "وضع ليلي"}
