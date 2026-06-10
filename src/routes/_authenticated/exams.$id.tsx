@@ -33,6 +33,7 @@ type Q = {
 function TakeExam() {
   const { id } = Route.useParams();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const grade = useServerFn(gradeEssay);
   const save = useServerFn(saveAttempt);
   const finish = useServerFn(finishExam);
