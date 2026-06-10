@@ -65,6 +65,18 @@ function WeakBank() {
     }
   };
 
+  const buildAllMistakesExam = async () => {
+    setBuildingAll(true);
+    try {
+      const res = await buildFromMistakes({ data: { scope: "all" } });
+      toast.success(`جاهز! تم تجميع ${res.count} سؤال`);
+      navigate({ to: "/exams/$id", params: { id: res.examId } });
+    } catch (e: any) {
+      toast.error(e.message || "تعذّر إنشاء الامتحان");
+      setBuildingAll(false);
+    }
+  };
+
   return (
     <div className="max-w-4xl mx-auto space-y-6">
       <div>
@@ -84,16 +96,28 @@ function WeakBank() {
       </div>
 
       {active.length > 0 && (
-        <Card className="p-6 flex items-center justify-between gap-4" style={{ background: "var(--gradient-primary)" }}>
-          <div className="text-primary-foreground">
-            <h3 className="font-bold text-lg">جاهز لإعادة التدريب؟</h3>
-            <p className="text-sm opacity-90">سننشئ امتحانًا جديدًا مخصصًا لنقاط ضعفك</p>
-          </div>
-          <Button variant="secondary" onClick={startRetraining} disabled={retraining}>
-            {retraining ? <Loader2 className="w-4 h-4 animate-spin" /> : <><RotateCcw className="w-4 h-4 ml-1" /> ابدأ</>}
-          </Button>
-        </Card>
+        <div className="grid md:grid-cols-2 gap-4">
+          <Card className="p-6 flex flex-col gap-3" style={{ background: "var(--gradient-primary)" }}>
+            <div className="text-primary-foreground">
+              <h3 className="font-bold text-lg flex items-center gap-2"><Sparkles className="w-5 h-5" /> امتحان مجمَّع من كل أخطائك</h3>
+              <p className="text-sm opacity-90 mt-1">يعيد طرح نفس الأسئلة التي أخطأت فيها — بدون تكرار</p>
+            </div>
+            <Button variant="secondary" onClick={buildAllMistakesExam} disabled={buildingAll} className="self-start">
+              {buildingAll ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Sparkles className="w-4 h-4 ml-1" /> ابدأ الآن</>}
+            </Button>
+          </Card>
+          <Card className="p-6 flex flex-col gap-3 border-primary/40">
+            <div>
+              <h3 className="font-bold text-lg">إعادة تدريب بأسئلة جديدة</h3>
+              <p className="text-sm text-muted-foreground mt-1">يولّد أسئلة جديدة بالذكاء الاصطناعي من نفس المصدر</p>
+            </div>
+            <Button variant="outline" onClick={startRetraining} disabled={retraining} className="self-start">
+              {retraining ? <Loader2 className="w-4 h-4 animate-spin" /> : <><RotateCcw className="w-4 h-4 ml-1" /> ابدأ</>}
+            </Button>
+          </Card>
+        </div>
       )}
+
 
       {isLoading ? <Loader2 className="animate-spin mx-auto mt-10" /> : (
         <div className="space-y-2">
