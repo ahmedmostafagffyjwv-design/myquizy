@@ -3,13 +3,17 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { AlertTriangle, CheckCircle2, Loader2, RotateCcw } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Loader2, RotateCcw, Sparkles } from "lucide-react";
 import { useServerFn } from "@tanstack/react-start";
 import { generateExam } from "@/lib/exams.functions";
+import { buildExamFromMistakes } from "@/lib/attempts.functions";
 import { toast } from "sonner";
 import { useState } from "react";
 
 export const Route = createFileRoute("/_authenticated/weak-bank")({
+  head: () => ({ meta: [{ title: "بنك الأخطاء — اختبرني" }] }),
+  component: WeakBank,
+});
   head: () => ({ meta: [{ title: "بنك الأخطاء — اختبرني" }] }),
   component: WeakBank,
 });
