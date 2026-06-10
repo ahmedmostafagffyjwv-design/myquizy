@@ -1,10 +1,14 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { CheckCircle2, XCircle, Trophy, RotateCcw, Home, Loader2 } from "lucide-react";
+import { CheckCircle2, XCircle, Trophy, RotateCcw, Home, Loader2, Sparkles } from "lucide-react";
 import { motion } from "framer-motion";
+import { useServerFn } from "@tanstack/react-start";
+import { buildExamFromMistakes } from "@/lib/attempts.functions";
+import { toast } from "sonner";
+import { useState } from "react";
 
 export const Route = createFileRoute("/_authenticated/exams/$id/results")({
   head: () => ({ meta: [{ title: "نتيجة الامتحان — اختبرني" }] }),
@@ -13,6 +17,21 @@ export const Route = createFileRoute("/_authenticated/exams/$id/results")({
 
 function Results() {
   const { id } = Route.useParams();
+  const navigate = useNavigate();
+  const buildFromMistakes = useServerFn(buildExamFromMistakes);
+  const [retrying, setRetrying] = useState(false);
+
+  const retryMistakes = async () => {
+    setRetrying(true);
+    try {
+      const res = await buildFromMistakes({ data: { scope: "exam", sourceExamId: id } });
+      toast.success(`تم تجميع ${res.count} سؤال لإعادة المحاولة`);
+      navigate({ to: "/exams/$id", params: { id: res.examId } });
+    } catch (e: any) {
+      toast.error(e.message || "تعذّر إنشاء إعادة الاختبار");
+      setRetrying(false);
+    }
+  };
   const { data, isLoading } = useQuery({
     queryKey: ["exam-results", id],
     queryFn: async () => {
@@ -44,12 +63,18 @@ function Results() {
           <p className="text-primary-foreground/90 mt-2">
             {correctCount} صحيح من {data.questions.length}
           </p>
-          <div className="flex gap-2 justify-center mt-6">
+          <div className="flex gap-2 justify-center mt-6 flex-wrap">
             <Link to="/dashboard"><Button variant="secondary"><Home className="w-4 h-4 ml-1" /> الرئيسية</Button></Link>
             <Link to="/exams/new"><Button variant="secondary"><RotateCcw className="w-4 h-4 ml-1" /> امتحان جديد</Button></Link>
+            {data.attempts.some((a: any) => !a.is_correct) && (
+              <Button variant="secondary" onClick={retryMistakes} disabled={retrying}>
+                {retrying ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Sparkles className="w-4 h-4 ml-1" /> أعد اختبار الأخطاء</>}
+              </Button>
+            )}
           </div>
         </Card>
       </motion.div>
+
 
       <h2 className="text-xl font-bold">مراجعة الأسئلة</h2>
 

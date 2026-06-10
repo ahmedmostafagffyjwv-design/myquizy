@@ -33,6 +33,7 @@ function Landing() {
             <span className="font-display font-bold text-xl">اختبرني</span>
           </div>
           <div className="flex items-center gap-2">
+            <Link to="/about"><Button variant="ghost">عن المشروع</Button></Link>
             <Link to="/auth"><Button variant="ghost">تسجيل الدخول</Button></Link>
             <Link to="/auth"><Button>ابدأ مجانًا</Button></Link>
           </div>

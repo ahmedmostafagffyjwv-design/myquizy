@@ -3,9 +3,10 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { AlertTriangle, CheckCircle2, Loader2, RotateCcw } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Loader2, RotateCcw, Sparkles } from "lucide-react";
 import { useServerFn } from "@tanstack/react-start";
 import { generateExam } from "@/lib/exams.functions";
+import { buildExamFromMistakes } from "@/lib/attempts.functions";
 import { toast } from "sonner";
 import { useState } from "react";
 
@@ -17,7 +18,10 @@ export const Route = createFileRoute("/_authenticated/weak-bank")({
 function WeakBank() {
   const navigate = useNavigate();
   const generate = useServerFn(generateExam);
+  const buildFromMistakes = useServerFn(buildExamFromMistakes);
   const [retraining, setRetraining] = useState(false);
+  const [buildingAll, setBuildingAll] = useState(false);
+
 
   const { data, isLoading } = useQuery({
     queryKey: ["weak-bank"],
@@ -61,6 +65,18 @@ function WeakBank() {
     }
   };
 
+  const buildAllMistakesExam = async () => {
+    setBuildingAll(true);
+    try {
+      const res = await buildFromMistakes({ data: { scope: "all" } });
+      toast.success(`جاهز! تم تجميع ${res.count} سؤال`);
+      navigate({ to: "/exams/$id", params: { id: res.examId } });
+    } catch (e: any) {
+      toast.error(e.message || "تعذّر إنشاء الامتحان");
+      setBuildingAll(false);
+    }
+  };
+
   return (
     <div className="max-w-4xl mx-auto space-y-6">
       <div>
@@ -80,16 +96,28 @@ function WeakBank() {
       </div>
 
       {active.length > 0 && (
-        <Card className="p-6 flex items-center justify-between gap-4" style={{ background: "var(--gradient-primary)" }}>
-          <div className="text-primary-foreground">
-            <h3 className="font-bold text-lg">جاهز لإعادة التدريب؟</h3>
-            <p className="text-sm opacity-90">سننشئ امتحانًا جديدًا مخصصًا لنقاط ضعفك</p>
-          </div>
-          <Button variant="secondary" onClick={startRetraining} disabled={retraining}>
-            {retraining ? <Loader2 className="w-4 h-4 animate-spin" /> : <><RotateCcw className="w-4 h-4 ml-1" /> ابدأ</>}
-          </Button>
-        </Card>
+        <div className="grid md:grid-cols-2 gap-4">
+          <Card className="p-6 flex flex-col gap-3" style={{ background: "var(--gradient-primary)" }}>
+            <div className="text-primary-foreground">
+              <h3 className="font-bold text-lg flex items-center gap-2"><Sparkles className="w-5 h-5" /> امتحان مجمَّع من كل أخطائك</h3>
+              <p className="text-sm opacity-90 mt-1">يعيد طرح نفس الأسئلة التي أخطأت فيها — بدون تكرار</p>
+            </div>
+            <Button variant="secondary" onClick={buildAllMistakesExam} disabled={buildingAll} className="self-start">
+              {buildingAll ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Sparkles className="w-4 h-4 ml-1" /> ابدأ الآن</>}
+            </Button>
+          </Card>
+          <Card className="p-6 flex flex-col gap-3 border-primary/40">
+            <div>
+              <h3 className="font-bold text-lg">إعادة تدريب بأسئلة جديدة</h3>
+              <p className="text-sm text-muted-foreground mt-1">يولّد أسئلة جديدة بالذكاء الاصطناعي من نفس المصدر</p>
+            </div>
+            <Button variant="outline" onClick={startRetraining} disabled={retraining} className="self-start">
+              {retraining ? <Loader2 className="w-4 h-4 animate-spin" /> : <><RotateCcw className="w-4 h-4 ml-1" /> ابدأ</>}
+            </Button>
+          </Card>
+        </div>
       )}
+
 
       {isLoading ? <Loader2 className="animate-spin mx-auto mt-10" /> : (
         <div className="space-y-2">

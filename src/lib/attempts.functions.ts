@@ -102,3 +102,104 @@ export const finishExam = createServerFn({ method: "POST" })
 
     return { score, total };
   });
+
+// Build a brand-new exam from previously-missed questions.
+// scope = "all" -> uses every still-unmastered weak_question for the user
+// scope = "exam" -> uses only wrong attempts from one specific source exam
+const BuildFromMistakesInput = z.object({
+  scope: z.enum(["all", "exam"]),
+  sourceExamId: z.string().uuid().optional(),
+  title: z.string().min(1).optional(),
+});
+
+export const buildExamFromMistakes = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => BuildFromMistakesInput.parse(d))
+  .handler(async ({ data, context }) => {
+    const { supabase, userId } = context;
+
+    let questionIds: string[] = [];
+    if (data.scope === "all") {
+      const { data: weak, error } = await supabase
+        .from("weak_questions")
+        .select("question_id, times_wrong")
+        .eq("user_id", userId)
+        .eq("mastered", false)
+        .order("times_wrong", { ascending: false })
+        .limit(50);
+      if (error) throw new Error(error.message);
+      questionIds = Array.from(new Set((weak || []).map((w) => w.question_id)));
+    } else {
+      if (!data.sourceExamId) throw new Error("sourceExamId مطلوب");
+      const { data: wrong, error } = await supabase
+        .from("attempts")
+        .select("question_id")
+        .eq("user_id", userId)
+        .eq("exam_id", data.sourceExamId)
+        .eq("is_correct", false);
+      if (error) throw new Error(error.message);
+      questionIds = Array.from(new Set((wrong || []).map((w) => w.question_id)));
+    }
+
+    if (questionIds.length === 0) {
+      throw new Error("لا توجد أسئلة خاطئة لإعادة اختبارها");
+    }
+
+    const { data: originals, error: qErr } = await supabase
+      .from("questions")
+      .select("*")
+      .in("id", questionIds)
+      .eq("user_id", userId);
+    if (qErr) throw new Error(qErr.message);
+    if (!originals || originals.length === 0) {
+      throw new Error("تعذّر استرجاع الأسئلة الأصلية");
+    }
+
+    const { data: srcExam } = await supabase
+      .from("exams")
+      .select("source_id")
+      .eq("id", originals[0].exam_id)
+      .maybeSingle();
+
+    const title =
+      data.title ??
+      (data.scope === "all"
+        ? "امتحان مجمَّع من كل الأخطاء"
+        : "إعادة اختبار أخطاء هذا الامتحان");
+
+    const { data: newExam, error: eErr } = await supabase
+      .from("exams")
+      .insert({
+        user_id: userId,
+        source_id: srcExam?.source_id ?? null,
+        title,
+        duration_minutes: Math.max(5, Math.min(60, originals.length * 2)),
+        question_count: originals.length,
+        difficulty: "mixed",
+        question_type: "mixed",
+        status: "pending",
+        is_retraining: true,
+      })
+      .select("id")
+      .single();
+    if (eErr || !newExam) throw new Error(eErr?.message || "فشل إنشاء الامتحان");
+
+    const shuffled = [...originals].sort(() => Math.random() - 0.5);
+    const cloned = shuffled.map((q, i) => ({
+      exam_id: newExam.id,
+      user_id: userId,
+      position: i + 1,
+      type: q.type,
+      difficulty: q.difficulty,
+      question_text: q.question_text,
+      options: q.options,
+      correct_answer: q.correct_answer,
+      explanation: q.explanation,
+      source_excerpt: q.source_excerpt,
+      image_url: q.image_url,
+    }));
+    const { error: insErr } = await supabase.from("questions").insert(cloned);
+    if (insErr) throw new Error(insErr.message);
+
+    return { examId: newExam.id, count: cloned.length };
+  });

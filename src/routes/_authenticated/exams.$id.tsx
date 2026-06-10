@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -10,7 +10,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { gradeEssay } from "@/lib/exams.functions";
 import { saveAttempt, finishExam } from "@/lib/attempts.functions";
 import { toast } from "sonner";
-import { Clock, ChevronLeft, ChevronRight, Loader2, BookOpen } from "lucide-react";
+import { Clock, ChevronLeft, ChevronRight, Loader2, BookOpen, CheckCircle2 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
 export const Route = createFileRoute("/_authenticated/exams/$id")({
@@ -33,6 +33,7 @@ type Q = {
 function TakeExam() {
   const { id } = Route.useParams();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const grade = useServerFn(gradeEssay);
   const save = useServerFn(saveAttempt);
   const finish = useServerFn(finishExam);
@@ -96,22 +97,30 @@ function TakeExam() {
     if (submitting) return;
     setSubmitting(true);
     try {
-      // Save all answered
-      for (const q of questions) {
-        const ans = (answers[q.id] || "").trim();
-        if (!ans) {
-          await save({ data: { examId: id, questionId: q.id, userAnswer: "", isCorrect: false, score: 0 } });
-          continue;
-        }
-        if (q.type === "mcq") {
-          const isCorrect = ans === q.correct_answer;
-          await save({ data: { examId: id, questionId: q.id, userAnswer: ans, isCorrect, score: isCorrect ? 10 : 0 } });
-        } else {
+      // Process all questions in parallel — way faster than the previous serial loop
+      await Promise.all(
+        questions.map(async (q) => {
+          const ans = (answers[q.id] || "").trim();
+          if (!ans) {
+            return save({ data: { examId: id, questionId: q.id, userAnswer: "", isCorrect: false, score: 0 } });
+          }
+          if (q.type === "mcq") {
+            const isCorrect = ans === q.correct_answer;
+            return save({ data: { examId: id, questionId: q.id, userAnswer: ans, isCorrect, score: isCorrect ? 10 : 0 } });
+          }
           const g = await grade({ data: { questionId: q.id, userAnswer: ans } });
-          await save({ data: { examId: id, questionId: q.id, userAnswer: ans, isCorrect: g.is_correct, score: g.score, aiFeedback: g.feedback } });
-        }
-      }
+          return save({ data: { examId: id, questionId: q.id, userAnswer: ans, isCorrect: g.is_correct, score: g.score, aiFeedback: g.feedback } });
+        })
+      );
       await finish({ data: { examId: id } });
+      // CRITICAL: invalidate any cached views of this exam so the results page shows fresh data
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["exam", id] }),
+        queryClient.invalidateQueries({ queryKey: ["exam-results", id] }),
+        queryClient.invalidateQueries({ queryKey: ["weak-bank"] }),
+        queryClient.invalidateQueries({ queryKey: ["exams-history"] }),
+        queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] }),
+      ]);
       toast.success("تم تسليم الامتحان!");
       navigate({ to: "/exams/$id/results", params: { id } });
     } catch (e: any) {
@@ -119,6 +128,23 @@ function TakeExam() {
       setSubmitting(false);
     }
   };
+
+  if (submitting) {
+    return (
+      <div className="max-w-md mx-auto py-20 text-center space-y-6">
+        <div className="relative inline-flex">
+          <div className="w-20 h-20 rounded-full border-4 border-primary/20" />
+          <Loader2 className="w-20 h-20 absolute inset-0 text-primary animate-spin" strokeWidth={1.5} />
+          <CheckCircle2 className="w-8 h-8 absolute inset-0 m-auto text-primary" />
+        </div>
+        <div className="space-y-2">
+          <h2 className="text-2xl font-bold">جارٍ تصحيح إجاباتك...</h2>
+          <p className="text-muted-foreground text-sm">نراجع كل سؤال ونحسب درجتك النهائية. لا تُغلق الصفحة.</p>
+        </div>
+      </div>
+    );
+  }
+
 
   return (
     <div className="max-w-3xl mx-auto space-y-4">
