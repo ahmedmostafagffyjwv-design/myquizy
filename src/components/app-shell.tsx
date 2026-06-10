@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { useQueryClient } from "@tanstack/react-query";
 import {
-  LayoutDashboard, PlusCircle, History, AlertTriangle, BarChart3, Sun, Moon, LogOut, BookOpenCheck,
+  LayoutDashboard, PlusCircle, History, AlertTriangle, BarChart3, Sun, Moon, LogOut, BookOpenCheck, Info,
 } from "lucide-react";
 import type { ReactNode } from "react";
 
