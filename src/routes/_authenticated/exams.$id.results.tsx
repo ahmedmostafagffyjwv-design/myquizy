@@ -17,6 +17,21 @@ export const Route = createFileRoute("/_authenticated/exams/$id/results")({
 
 function Results() {
   const { id } = Route.useParams();
+  const navigate = useNavigate();
+  const buildFromMistakes = useServerFn(buildExamFromMistakes);
+  const [retrying, setRetrying] = useState(false);
+
+  const retryMistakes = async () => {
+    setRetrying(true);
+    try {
+      const res = await buildFromMistakes({ data: { scope: "exam", sourceExamId: id } });
+      toast.success(`تم تجميع ${res.count} سؤال لإعادة المحاولة`);
+      navigate({ to: "/exams/$id", params: { id: res.examId } });
+    } catch (e: any) {
+      toast.error(e.message || "تعذّر إنشاء إعادة الاختبار");
+      setRetrying(false);
+    }
+  };
   const { data, isLoading } = useQuery({
     queryKey: ["exam-results", id],
     queryFn: async () => {
