@@ -15,6 +15,7 @@ import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedWeakBankRouteImport } from './routes/_authenticated/weak-bank'
 import { Route as AuthenticatedStatsRouteImport } from './routes/_authenticated/stats'
+import { Route as AuthenticatedMathRouteImport } from './routes/_authenticated/math'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
 import { Route as AuthenticatedExamsNewRouteImport } from './routes/_authenticated/exams.new'
 import { Route as AuthenticatedExamsHistoryRouteImport } from './routes/_authenticated/exams.history'
@@ -50,6 +51,11 @@ const AuthenticatedStatsRoute = AuthenticatedStatsRouteImport.update({
   path: '/stats',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedMathRoute = AuthenticatedMathRouteImport.update({
+  id: '/math',
+  path: '/math',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedDashboardRoute = AuthenticatedDashboardRouteImport.update({
   id: '/dashboard',
   path: '/dashboard',
@@ -83,6 +89,7 @@ export interface FileRoutesByFullPath {
   '/about': typeof AboutRoute
   '/auth': typeof AuthRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
+  '/math': typeof AuthenticatedMathRoute
   '/stats': typeof AuthenticatedStatsRoute
   '/weak-bank': typeof AuthenticatedWeakBankRoute
   '/exams/$id': typeof AuthenticatedExamsIdRouteWithChildren
@@ -95,6 +102,7 @@ export interface FileRoutesByTo {
   '/about': typeof AboutRoute
   '/auth': typeof AuthRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
+  '/math': typeof AuthenticatedMathRoute
   '/stats': typeof AuthenticatedStatsRoute
   '/weak-bank': typeof AuthenticatedWeakBankRoute
   '/exams/$id': typeof AuthenticatedExamsIdRouteWithChildren
@@ -109,6 +117,7 @@ export interface FileRoutesById {
   '/about': typeof AboutRoute
   '/auth': typeof AuthRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
+  '/_authenticated/math': typeof AuthenticatedMathRoute
   '/_authenticated/stats': typeof AuthenticatedStatsRoute
   '/_authenticated/weak-bank': typeof AuthenticatedWeakBankRoute
   '/_authenticated/exams/$id': typeof AuthenticatedExamsIdRouteWithChildren
@@ -123,6 +132,7 @@ export interface FileRouteTypes {
     | '/about'
     | '/auth'
     | '/dashboard'
+    | '/math'
     | '/stats'
     | '/weak-bank'
     | '/exams/$id'
@@ -135,6 +145,7 @@ export interface FileRouteTypes {
     | '/about'
     | '/auth'
     | '/dashboard'
+    | '/math'
     | '/stats'
     | '/weak-bank'
     | '/exams/$id'
@@ -148,6 +159,7 @@ export interface FileRouteTypes {
     | '/about'
     | '/auth'
     | '/_authenticated/dashboard'
+    | '/_authenticated/math'
     | '/_authenticated/stats'
     | '/_authenticated/weak-bank'
     | '/_authenticated/exams/$id'
@@ -207,6 +219,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedStatsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/math': {
+      id: '/_authenticated/math'
+      path: '/math'
+      fullPath: '/math'
+      preLoaderRoute: typeof AuthenticatedMathRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/dashboard': {
       id: '/_authenticated/dashboard'
       path: '/dashboard'
@@ -258,6 +277,7 @@ const AuthenticatedExamsIdRouteWithChildren =
 
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
+  AuthenticatedMathRoute: typeof AuthenticatedMathRoute
   AuthenticatedStatsRoute: typeof AuthenticatedStatsRoute
   AuthenticatedWeakBankRoute: typeof AuthenticatedWeakBankRoute
   AuthenticatedExamsIdRoute: typeof AuthenticatedExamsIdRouteWithChildren
@@ -267,6 +287,7 @@ interface AuthenticatedRouteRouteChildren {
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
+  AuthenticatedMathRoute: AuthenticatedMathRoute,
   AuthenticatedStatsRoute: AuthenticatedStatsRoute,
   AuthenticatedWeakBankRoute: AuthenticatedWeakBankRoute,
   AuthenticatedExamsIdRoute: AuthenticatedExamsIdRouteWithChildren,
