@@ -110,6 +110,9 @@ const BuildFromMistakesInput = z.object({
   scope: z.enum(["all", "exam"]),
   sourceExamId: z.string().uuid().optional(),
   title: z.string().min(1).optional(),
+  filterSourceId: z.string().uuid().optional(),
+  filterDifficulty: z.enum(["easy", "medium", "hard"]).optional(),
+  repeatedOnly: z.boolean().optional(),
 });
 
 export const buildExamFromMistakes = createServerFn({ method: "POST" })
@@ -120,13 +123,14 @@ export const buildExamFromMistakes = createServerFn({ method: "POST" })
 
     let questionIds: string[] = [];
     if (data.scope === "all") {
-      const { data: weak, error } = await supabase
+      let q = supabase
         .from("weak_questions")
-        .select("question_id, times_wrong")
+        .select("question_id, times_wrong, source_id")
         .eq("user_id", userId)
-        .eq("mastered", false)
-        .order("times_wrong", { ascending: false })
-        .limit(50);
+        .eq("mastered", false);
+      if (data.filterSourceId) q = q.eq("source_id", data.filterSourceId);
+      if (data.repeatedOnly) q = q.gte("times_wrong", 2);
+      const { data: weak, error } = await q.order("times_wrong", { ascending: false }).limit(50);
       if (error) throw new Error(error.message);
       questionIds = Array.from(new Set((weak || []).map((w) => w.question_id)));
     } else {
@@ -139,6 +143,15 @@ export const buildExamFromMistakes = createServerFn({ method: "POST" })
         .eq("is_correct", false);
       if (error) throw new Error(error.message);
       questionIds = Array.from(new Set((wrong || []).map((w) => w.question_id)));
+    }
+
+    if (data.filterDifficulty && questionIds.length > 0) {
+      const { data: filtered } = await supabase
+        .from("questions")
+        .select("id")
+        .in("id", questionIds)
+        .eq("difficulty", data.filterDifficulty);
+      questionIds = (filtered || []).map((q) => q.id);
     }
 
     if (questionIds.length === 0) {
