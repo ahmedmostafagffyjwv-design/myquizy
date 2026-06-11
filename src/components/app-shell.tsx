@@ -88,7 +88,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         </header>
         <main className="flex-1 p-4 md:p-8 overflow-auto">{children}</main>
         {/* mobile bottom nav */}
-        <nav className="md:hidden grid grid-cols-5 border-t bg-card">
+        <nav className="md:hidden grid grid-cols-6 border-t bg-card">
           {navItems.map((it) => (
             <Link key={it.to} to={it.to} className="flex flex-col items-center gap-1 py-2 text-[10px] text-muted-foreground" activeProps={{ className: "text-primary" }}>
               <it.icon className="w-5 h-5" />
