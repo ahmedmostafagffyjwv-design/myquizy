@@ -22,6 +22,7 @@ import { toast } from "sonner";
 import { useMemo, useState } from "react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Progress } from "@/components/ui/progress";
+import { MixedLatex } from "@/components/math/Latex";
 
 export const Route = createFileRoute("/_authenticated/weak-bank")({
   head: () => ({ meta: [{ title: "بنك الأخطاء — اختبرني" }] }),
@@ -332,7 +333,7 @@ function WeakBank() {
               {[...active, ...mastered].map((w: any) => (
                 <Card key={w.id} className="p-4 flex items-start justify-between gap-3">
                   <div className="min-w-0 flex-1">
-                    <p className="font-medium line-clamp-2">{w.questions?.question_text}</p>
+                    <p className="font-medium line-clamp-2"><MixedLatex text={w.questions?.question_text || ""} /></p>
                     <div className="text-xs text-muted-foreground mt-1 flex flex-wrap gap-2">
                       <span>من: {w.sources?.title || "—"}</span>
                       <span>·</span>

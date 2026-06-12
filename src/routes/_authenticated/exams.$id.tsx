@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
@@ -12,6 +12,7 @@ import { saveAttempt, finishExam } from "@/lib/attempts.functions";
 import { toast } from "sonner";
 import { Clock, ChevronLeft, ChevronRight, Loader2, BookOpen, CheckCircle2 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import { MixedLatex } from "@/components/math/Latex";
 
 export const Route = createFileRoute("/_authenticated/exams/$id")({
   head: () => ({ meta: [{ title: "خوض الامتحان — اختبرني" }] }),
@@ -54,50 +55,22 @@ function TakeExam() {
   const [submitting, setSubmitting] = useState(false);
   const [showSource, setShowSource] = useState(false);
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
-
-  // start timer
-  useEffect(() => {
-    if (!data?.exam) return;
-    const startedAt = data.exam.started_at ? new Date(data.exam.started_at) : new Date();
-    if (!data.exam.started_at) {
-      supabase.from("exams").update({ started_at: startedAt.toISOString(), status: "in_progress" }).eq("id", id);
-    }
-    const totalMs = data.exam.duration_minutes * 60_000;
-    const tick = () => {
-      const left = Math.max(0, startedAt.getTime() + totalMs - Date.now());
-      setTimeLeft(left);
-      if (left === 0) submitAll();
-    };
-    tick();
-    const t = setInterval(tick, 1000);
-    return () => clearInterval(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data?.exam?.id]);
+  // hard guard: the exam can only ever be submitted once
+  const submittedRef = useRef(false);
+  // always points at the LATEST submitAll (avoids stale empty answers on auto-submit)
+  const submitRef = useRef<() => void>(() => {});
 
   const questions = data?.questions ?? [];
   const current = questions[idx];
   const answered = useMemo(() => Object.keys(answers).filter((k) => answers[k]?.trim()).length, [answers]);
 
-  if (isLoading || !data?.exam) {
-    return <div className="flex items-center justify-center py-20"><Loader2 className="w-6 h-6 animate-spin" /></div>;
-  }
-
-  if (data.exam.status === "completed") {
-    navigate({ to: "/exams/$id/results", params: { id } });
-    return null;
-  }
-
-  const fmt = (ms: number) => {
-    const s = Math.floor(ms / 1000);
-    const m = Math.floor(s / 60);
-    return `${String(m).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
-  };
-
   const submitAll = async () => {
-    if (submitting) return;
+    if (submittedRef.current) return;
+    if (data?.exam?.status === "completed") return;
+    submittedRef.current = true;
     setSubmitting(true);
     try {
-      // Process all questions in parallel — way faster than the previous serial loop
+      // Process all questions in parallel — way faster than a serial loop
       await Promise.all(
         questions.map(async (q) => {
           const ans = (answers[q.id] || "").trim();
@@ -113,7 +86,7 @@ function TakeExam() {
         })
       );
       await finish({ data: { examId: id } });
-      // CRITICAL: invalidate any cached views of this exam so the results page shows fresh data
+      // invalidate any cached views of this exam so the results page shows fresh data
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["exam", id] }),
         queryClient.invalidateQueries({ queryKey: ["exam-results", id] }),
@@ -125,8 +98,67 @@ function TakeExam() {
       navigate({ to: "/exams/$id/results", params: { id } });
     } catch (e: any) {
       toast.error(e.message || "فشل التسليم");
+      submittedRef.current = false;
       setSubmitting(false);
     }
+  };
+
+  // keep the ref in sync with the freshest closure (answers, questions, ...)
+  useEffect(() => {
+    submitRef.current = submitAll;
+  });
+
+  // already-completed exams go straight to results (side effect, not during render)
+  useEffect(() => {
+    if (data?.exam?.status === "completed") {
+      navigate({ to: "/exams/$id/results", params: { id }, replace: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data?.exam?.status]);
+
+  // start timer
+  useEffect(() => {
+    if (!data?.exam || data.exam.status === "completed") return;
+    const startedAt = data.exam.started_at ? new Date(data.exam.started_at) : new Date();
+    if (!data.exam.started_at) {
+      // NOTE: supabase builders are lazy — .then() is required to actually execute
+      supabase
+        .from("exams")
+        .update({ started_at: startedAt.toISOString(), status: "in_progress" })
+        .eq("id", id)
+        .then(() => {});
+    }
+    const totalMs = data.exam.duration_minutes * 60_000;
+    let timer: ReturnType<typeof setInterval> | undefined;
+    const tick = () => {
+      const left = Math.max(0, startedAt.getTime() + totalMs - Date.now());
+      setTimeLeft(left);
+      if (left === 0) {
+        if (timer) clearInterval(timer);
+        // submits exactly once, with the latest answers
+        submitRef.current();
+      }
+    };
+    tick();
+    timer = setInterval(tick, 1000);
+    return () => {
+      if (timer) clearInterval(timer);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data?.exam?.id]);
+
+  if (isLoading || !data?.exam) {
+    return <div className="flex items-center justify-center py-20"><Loader2 className="w-6 h-6 animate-spin" /></div>;
+  }
+
+  if (data.exam.status === "completed") {
+    return null;
+  }
+
+  const fmt = (ms: number) => {
+    const s = Math.floor(ms / 1000);
+    const m = Math.floor(s / 60);
+    return `${String(m).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
   };
 
   if (submitting) {
@@ -178,7 +210,7 @@ function TakeExam() {
                 )}
               </div>
 
-              <h2 className="text-lg md:text-xl font-bold leading-relaxed">{current.question_text}</h2>
+              <h2 className="text-lg md:text-xl font-bold leading-relaxed"><MixedLatex text={current.question_text} /></h2>
 
               {showSource && current.source_excerpt && (
                 <div className="text-sm bg-muted p-3 rounded-lg border-r-4 border-primary text-muted-foreground italic">
@@ -199,7 +231,7 @@ function TakeExam() {
                         <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-muted text-xs ml-3 font-bold">
                           {["أ", "ب", "ج", "د"][i]}
                         </span>
-                        {opt}
+                        <MixedLatex text={opt} />
                       </button>
                     );
                   })}

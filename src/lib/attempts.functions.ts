@@ -17,18 +17,21 @@ export const saveAttempt = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
 
-    // upsert attempt (one per question per exam)
+    // real upsert — unique constraint (user_id, exam_id, question_id) prevents duplicates
     const { error: aErr } = await supabase
       .from("attempts")
-      .insert({
-        exam_id: data.examId,
-        question_id: data.questionId,
-        user_id: userId,
-        user_answer: data.userAnswer,
-        is_correct: data.isCorrect,
-        score: data.score ?? (data.isCorrect ? 10 : 0),
-        ai_feedback: data.aiFeedback,
-      });
+      .upsert(
+        {
+          exam_id: data.examId,
+          question_id: data.questionId,
+          user_id: userId,
+          user_answer: data.userAnswer,
+          is_correct: data.isCorrect,
+          score: data.score ?? (data.isCorrect ? 10 : 0),
+          ai_feedback: data.aiFeedback,
+        },
+        { onConflict: "user_id,exam_id,question_id" },
+      );
     if (aErr) throw new Error(aErr.message);
 
     // weak bank
