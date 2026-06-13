@@ -8,12 +8,13 @@ import { Textarea } from "@/components/ui/textarea";
 import { Slider } from "@/components/ui/slider";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useServerFn } from "@tanstack/react-start";
-import { generateExam, ocrImage } from "@/lib/exams.functions";
+import { assistManualQuestion, generateExam, ocrImage } from "@/lib/exams.functions";
 import { supabase } from "@/integrations/supabase/client";
 import { extractTextFromFile, fileToBase64 } from "@/lib/file-extract";
 import { toast } from "sonner";
-import { Upload, FileText, Loader2, Sparkles } from "lucide-react";
+import { Upload, FileText, Loader2, Sparkles, ListChecks, Wand2, CopyPlus } from "lucide-react";
 import { motion } from "framer-motion";
+import { MixedLatex } from "@/components/math/Latex";
 
 export const Route = createFileRoute("/_authenticated/exams/new")({
   head: () => ({ meta: [{ title: "امتحان جديد — اختبرني" }] }),
@@ -24,6 +25,7 @@ function NewExam() {
   const navigate = useNavigate();
   const generate = useServerFn(generateExam);
   const ocr = useServerFn(ocrImage);
+  const assistQuestion = useServerFn(assistManualQuestion);
 
   const [step, setStep] = useState<1 | 2>(1);
   const [file, setFile] = useState<File | null>(null);
@@ -37,6 +39,10 @@ function NewExam() {
   const [difficulty, setDifficulty] = useState<"easy" | "medium" | "hard" | "mixed">("mixed");
   const [qType, setQType] = useState<"mcq" | "essay" | "mixed">("mcq");
   const [generating, setGenerating] = useState(false);
+  const [manualQuestion, setManualQuestion] = useState("");
+  const [assistMode, setAssistMode] = useState<"choices" | "similar">("choices");
+  const [assisting, setAssisting] = useState(false);
+  const [assistResult, setAssistResult] = useState<any | null>(null);
 
   const handleFile = async (f: File) => {
     setFile(f);
@@ -107,6 +113,31 @@ function NewExam() {
     }
   };
 
+  const handleAssist = async () => {
+    if (manualQuestion.trim().length < 8) {
+      toast.error("اكتب السؤال أولاً");
+      return;
+    }
+
+    setAssisting(true);
+    try {
+      const result = await assistQuestion({
+        data: {
+          questionText: manualQuestion.trim(),
+          mode: assistMode,
+          questionType: qType,
+          difficulty,
+        },
+      });
+      setAssistResult(result);
+      toast.success(assistMode === "choices" ? "تم توليد الاختيارات" : "تم توليد أسئلة مشابهة");
+    } catch (e: any) {
+      toast.error(e.message || "فشل التوليد");
+    } finally {
+      setAssisting(false);
+    }
+  };
+
   return (
     <div className="max-w-3xl mx-auto space-y-6">
       <div>
@@ -159,6 +190,93 @@ function NewExam() {
               <Label>عنوان المصدر</Label>
               <Input value={sourceTitle} onChange={(e) => setSourceTitle(e.target.value)} className="mt-2" placeholder="مثلاً: الفصل الثالث - علوم" />
             </div>
+
+            <Card className="p-4 space-y-4 bg-muted/30">
+              <div className="flex items-start justify-between gap-3 flex-wrap">
+                <div>
+                  <h2 className="font-bold flex items-center gap-2"><Wand2 className="w-4 h-4" /> مساعد السؤال اليدوي</h2>
+                  <p className="text-xs text-muted-foreground mt-1">أدخل سؤالًا بصيغته، ثم ولّد له اختيارات أو أسئلة مشابهة بنفس النمط.</p>
+                </div>
+              </div>
+
+              <div>
+                <Label>السؤال اليدوي</Label>
+                <Textarea
+                  value={manualQuestion}
+                  onChange={(e) => setManualQuestion(e.target.value)}
+                  rows={4}
+                  className="mt-2"
+                  placeholder="مثال: ما ناتج حل المعادلة $x^2 - 5x + 6 = 0$؟"
+                />
+              </div>
+
+              <div>
+                <Label className="mb-3 block">نوع المساعدة</Label>
+                <RadioGroup value={assistMode} onValueChange={(v: any) => setAssistMode(v)} className="grid grid-cols-2 gap-2">
+                  <label className={`border rounded-lg p-3 cursor-pointer text-center text-sm transition-colors ${assistMode === "choices" ? "border-primary bg-primary/10 text-primary font-bold" : "hover:bg-accent"}`}>
+                    <RadioGroupItem value="choices" className="sr-only" />
+                    <span className="inline-flex items-center gap-2"><ListChecks className="w-4 h-4" /> توليد اختيارات</span>
+                  </label>
+                  <label className={`border rounded-lg p-3 cursor-pointer text-center text-sm transition-colors ${assistMode === "similar" ? "border-primary bg-primary/10 text-primary font-bold" : "hover:bg-accent"}`}>
+                    <RadioGroupItem value="similar" className="sr-only" />
+                    <span className="inline-flex items-center gap-2"><CopyPlus className="w-4 h-4" /> أسئلة مشابهة</span>
+                  </label>
+                </RadioGroup>
+              </div>
+
+              <Button type="button" variant="outline" onClick={handleAssist} disabled={assisting || !manualQuestion.trim()}>
+                {assisting ? <><Loader2 className="w-4 h-4 animate-spin ml-2" /> جارٍ التوليد...</> : <><Sparkles className="w-4 h-4 ml-2" /> نفّذ</>}
+              </Button>
+
+              {assistResult?.mode === "choices" && (
+                <div className="space-y-3 rounded-lg border p-4 bg-background">
+                  <div>
+                    <p className="text-sm font-bold"><MixedLatex text={assistResult.stem} /></p>
+                  </div>
+                  <div className="space-y-2">
+                    {assistResult.options?.map((opt: string, i: number) => (
+                      <div key={i} className={`rounded-lg border p-3 text-sm ${opt === assistResult.correct_answer ? "border-primary bg-primary/10" : "bg-muted/30"}`}>
+                        <MixedLatex text={opt} />
+                      </div>
+                    ))}
+                  </div>
+                  <div className="text-sm">
+                    <p className="font-medium">الإجابة الصحيحة</p>
+                    <p className="text-muted-foreground"><MixedLatex text={assistResult.correct_answer} /></p>
+                  </div>
+                  <div className="text-sm">
+                    <p className="font-medium">الشرح</p>
+                    <p className="text-muted-foreground"><MixedLatex text={assistResult.explanation} /></p>
+                  </div>
+                </div>
+              )}
+
+              {assistResult?.mode === "similar" && (
+                <div className="space-y-3">
+                  {assistResult.questions?.map((q: any, i: number) => (
+                    <div key={i} className="rounded-lg border p-4 bg-background space-y-2">
+                      <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
+                        <span>{q.type === "mcq" ? "اختيار من متعدد" : "مقالي"}</span>
+                        <span>{q.difficulty === "easy" ? "سهل" : q.difficulty === "medium" ? "متوسط" : "صعب"}</span>
+                      </div>
+                      <p className="font-medium"><MixedLatex text={q.question_text} /></p>
+                      {q.options?.length > 0 && (
+                        <div className="space-y-1">
+                          {q.options.map((opt: string, j: number) => (
+                            <div key={j} className={`text-sm rounded-md border px-3 py-2 ${opt === q.correct_answer ? "border-primary bg-primary/10" : "bg-muted/30"}`}>
+                              <MixedLatex text={opt} />
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      <div className="text-sm text-muted-foreground">
+                        <span className="font-medium text-foreground">الإجابة:</span> <MixedLatex text={q.correct_answer} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </Card>
 
             <Button onClick={goToSetup} disabled={extracting || rawText.length < 200} className="w-full" size="lg">
               {extracting ? <><Loader2 className="w-4 h-4 animate-spin ml-2" /> جارٍ الاستخراج...</> : "التالي"}
