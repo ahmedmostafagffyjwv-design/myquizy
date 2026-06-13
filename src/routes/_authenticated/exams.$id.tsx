@@ -42,10 +42,12 @@ function TakeExam() {
   const { data, isLoading } = useQuery({
     queryKey: ["exam", id],
     queryFn: async () => {
-      const [{ data: exam }, { data: qs }] = await Promise.all([
+      const [{ data: exam, error: examErr }, { data: qs, error: qsErr }] = await Promise.all([
         supabase.from("exams").select("*").eq("id", id).single(),
         supabase.from("questions").select("*").eq("exam_id", id).order("position"),
       ]);
+      if (examErr) throw examErr;
+      if (qsErr) throw qsErr;
       return { exam, questions: (qs || []) as Q[] };
     },
   });
