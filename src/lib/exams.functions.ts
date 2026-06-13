@@ -57,6 +57,13 @@ const GenInput = z.object({
   weakQuestionIds: z.array(z.string().uuid()).optional(),
 });
 
+const ManualQuestionAssistInput = z.object({
+  questionText: z.string().min(8).max(4000),
+  mode: z.enum(["choices", "similar"]),
+  questionType: z.enum(["mcq", "essay", "mixed"]).default("mcq"),
+  difficulty: z.enum(["easy", "medium", "hard", "mixed"]).default("mixed"),
+});
+
 const questionSchema = z.object({
   type: z.enum(["mcq", "essay"]),
   difficulty: z.enum(["easy", "medium", "hard"]),
@@ -386,6 +393,26 @@ const gradeSchema = z.object({
   feedback: z.string(),
 });
 
+const manualChoicesSchema = z.object({
+  stem: z.string(),
+  options: z.array(z.string()).min(4).max(4),
+  correct_answer: z.string(),
+  explanation: z.string(),
+});
+
+const manualSimilarQuestionSchema = z.object({
+  type: z.enum(["mcq", "essay"]),
+  difficulty: z.enum(["easy", "medium", "hard"]),
+  question_text: z.string(),
+  options: z.array(z.string()).optional(),
+  correct_answer: z.string(),
+  explanation: z.string(),
+});
+
+const manualSimilarSchema = z.object({
+  questions: z.array(manualSimilarQuestionSchema).min(2).max(4),
+});
+
 export const gradeEssay = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => GradeInput.parse(d))
@@ -415,4 +442,59 @@ export const gradeEssay = createServerFn({ method: "POST" })
     });
 
     return object;
+  });
+
+export const assistManualQuestion = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => ManualQuestionAssistInput.parse(d))
+  .handler(async ({ data }) => {
+    const gateway = getGateway();
+
+    if (data.mode === "choices") {
+      const { object } = await generateObject({
+        model: gateway(MODEL),
+        schema: manualChoicesSchema,
+        system: `أنت خبير صياغة أسئلة تعليمية. المطلوب إكمال سؤال المستخدم بخيارات قوية فقط.
+- لا تغيّر جوهر السؤال.
+- أنشئ 4 خيارات قصيرة وواضحة وغير متطابقة.
+- اجعل خيارًا واحدًا صحيحًا فقط.
+- أعد correct_answer مطابقًا نصيًا تمامًا لأحد الخيارات.
+- إن احتوى السؤال على رياضيات فاستخدم LaTeX بين $...$.
+- أعد العربية الفصحى فقط.`,
+        prompt: `أكمل هذا السؤال بخيارات اختيار من متعدد:
+${data.questionText}`,
+      });
+
+      return { mode: "choices" as const, ...object };
+    }
+
+    const difficultyAr =
+      data.difficulty === "easy" ? "سهلة"
+      : data.difficulty === "medium" ? "متوسطة"
+      : data.difficulty === "hard" ? "صعبة"
+      : "مختلطة";
+
+    const typeAr =
+      data.questionType === "mcq" ? "اختيار من متعدد"
+      : data.questionType === "essay" ? "مقالية"
+      : "مزيج بين اختيار من متعدد ومقالية";
+
+    const { object } = await generateObject({
+      model: gateway(MODEL),
+      schema: manualSimilarSchema,
+      system: `أنت خبير توليد أسئلة مشابهة. أنشئ أسئلة جديدة تشبه صياغة السؤال الأصلي ونفس النمط المعرفي، لكن لا تنسخه حرفيًا.
+- عدد الأسئلة من 2 إلى 4.
+- التزم فقط بصياغة تعليمية واضحة بالعربية.
+- إذا كان النوع mcq فأضف 4 خيارات مع correct_answer يطابق نص الخيار الصحيح.
+- إذا كان النوع essay فلا تضف خيارات.
+- إذا وُجدت معادلات فاستخدم LaTeX بين $...$.
+- explanation قصيرة ومباشرة.`,
+      prompt: `السؤال الأصلي:
+${data.questionText}
+
+المستوى المطلوب: ${difficultyAr}
+نوع الأسئلة المطلوب: ${typeAr}`,
+    });
+
+    return { mode: "similar" as const, ...object };
   });
