@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
@@ -11,6 +11,7 @@ export const Route = createFileRoute("/_authenticated/exams/history")({
 });
 
 function HistoryPage() {
+  const navigate = useNavigate();
   const { data, isLoading } = useQuery({
     queryKey: ["exams-history"],
     queryFn: async () => {
@@ -42,7 +43,9 @@ function HistoryPage() {
                 {e.status === "completed" ? (
                   <>
                     <span className={`font-bold text-lg ${(e.score ?? 0) >= 70 ? "text-success" : (e.score ?? 0) >= 50 ? "text-warning" : "text-destructive"}`}>{e.score}%</span>
-                    <Link to="/exams/$id/results" params={{ id: e.id }}><Button size="sm" variant="outline">المراجعة <ChevronLeft className="w-3 h-3 mr-1" /></Button></Link>
+                    <Button size="sm" variant="outline" onClick={() => navigate({ to: "/exams/$id/results", params: { id: e.id } })}>
+                      المراجعة <ChevronLeft className="w-3 h-3 mr-1" />
+                    </Button>
                   </>
                 ) : (
                   <Link to="/exams/$id" params={{ id: e.id }}><Button size="sm">متابعة</Button></Link>
