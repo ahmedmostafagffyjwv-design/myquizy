@@ -66,12 +66,15 @@ function TakeExam() {
 
   const submitAll = async () => {
     if (submittedRef.current) return;
-    if (data?.exam?.status === "completed") return;
+    if (data?.exam?.status === "completed") {
+      navigate({ to: "/exams/$id/results", params: { id }, replace: true });
+      return;
+    }
     submittedRef.current = true;
     setSubmitting(true);
     try {
-      // Process all questions in parallel — way faster than a serial loop
-      await Promise.all(
+      // Process all questions in parallel — partial failures should NOT block submission
+      await Promise.allSettled(
         questions.map(async (q) => {
           const ans = (answers[q.id] || "").trim();
           if (!ans) {
@@ -81,12 +84,21 @@ function TakeExam() {
             const isCorrect = ans === q.correct_answer;
             return save({ data: { examId: id, questionId: q.id, userAnswer: ans, isCorrect, score: isCorrect ? 10 : 0 } });
           }
-          const g = await grade({ data: { questionId: q.id, userAnswer: ans } });
-          return save({ data: { examId: id, questionId: q.id, userAnswer: ans, isCorrect: g.is_correct, score: g.score, aiFeedback: g.feedback } });
+          try {
+            const g = await grade({ data: { questionId: q.id, userAnswer: ans } });
+            return save({ data: { examId: id, questionId: q.id, userAnswer: ans, isCorrect: g.is_correct, score: g.score, aiFeedback: g.feedback } });
+          } catch {
+            // grading failed → save raw answer as wrong so the user still has a record
+            return save({ data: { examId: id, questionId: q.id, userAnswer: ans, isCorrect: false, score: 0, aiFeedback: "تعذّر التصحيح التلقائي" } });
+          }
         })
       );
-      await finish({ data: { examId: id } });
-      // invalidate any cached views of this exam so the results page shows fresh data
+      // Finalize the exam — even if this throws, we still navigate so the user sees the review page
+      try {
+        await finish({ data: { examId: id } });
+      } catch (err: any) {
+        console.error("finishExam failed", err);
+      }
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["exam", id] }),
         queryClient.invalidateQueries({ queryKey: ["exam-results", id] }),
@@ -97,8 +109,10 @@ function TakeExam() {
       toast.success("تم تسليم الامتحان!");
       navigate({ to: "/exams/$id/results", params: { id } });
     } catch (e: any) {
-      toast.error(e.message || "فشل التسليم");
-      submittedRef.current = false;
+      // Last-resort safety net — still take the user to the results page
+      toast.error(e.message || "حدث خطأ أثناء التسليم، نعرض النتائج المتاحة");
+      navigate({ to: "/exams/$id/results", params: { id } });
+    } finally {
       setSubmitting(false);
     }
   };
