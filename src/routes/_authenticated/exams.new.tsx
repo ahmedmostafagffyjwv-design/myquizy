@@ -398,6 +398,20 @@ function NewExam() {
               </RadioGroup>
             </div>
 
+            <div>
+              <Label className="mb-3 block">شكل الأسئلة</Label>
+              <RadioGroup value={questionShape} onValueChange={(v: any) => setQuestionShape(v)} className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                {SHAPE_OPTIONS.map((o) => (
+                  <label key={o.v} className={`border rounded-lg p-3 cursor-pointer text-center text-sm transition-colors ${questionShape === o.v ? "border-primary bg-primary/10 text-primary font-bold" : "hover:bg-accent"} ${analysis?.suggested_shape === o.v ? "ring-1 ring-primary/40" : ""}`}>
+                    <RadioGroupItem value={o.v} className="sr-only" />
+                    {o.l}
+                    {analysis?.suggested_shape === o.v && <span className="block text-[10px] text-primary mt-0.5">مقترح</span>}
+                  </label>
+                ))}
+              </RadioGroup>
+            </div>
+
+
             <div className="flex gap-2">
               <Button variant="outline" onClick={() => setStep(1)} disabled={generating} className="flex-1">السابق</Button>
               <Button onClick={start} disabled={generating} className="flex-1" size="lg">
