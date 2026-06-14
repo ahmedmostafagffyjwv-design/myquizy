@@ -8,13 +8,32 @@ import { Textarea } from "@/components/ui/textarea";
 import { Slider } from "@/components/ui/slider";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useServerFn } from "@tanstack/react-start";
-import { assistManualQuestion, generateExam, ocrImage } from "@/lib/exams.functions";
+import { analyzeSource, assistManualQuestion, generateExam, ocrImage } from "@/lib/exams.functions";
 import { supabase } from "@/integrations/supabase/client";
 import { extractTextFromFile, fileToBase64 } from "@/lib/file-extract";
 import { toast } from "sonner";
-import { Upload, FileText, Loader2, Sparkles, ListChecks, Wand2, CopyPlus } from "lucide-react";
+import { Upload, FileText, Loader2, Sparkles, ListChecks, Wand2, CopyPlus, Brain } from "lucide-react";
 import { motion } from "framer-motion";
 import { MixedLatex } from "@/components/math/Latex";
+
+const SHAPE_OPTIONS = [
+  { v: "memorization", l: "حفظ وتعريفات" },
+  { v: "understanding", l: "فهم وتحليل" },
+  { v: "problems", l: "مسائل وقوانين" },
+  { v: "visual", l: "رسوم وصور" },
+  { v: "comparison", l: "مقارنة واستنتاج" },
+  { v: "mixed", l: "مختلطة" },
+] as const;
+
+const NATURE_LABELS: Record<string, string> = {
+  mathematical: "رياضي/فيزيائي",
+  scientific: "علمي تجريبي",
+  biological: "أحيائي/تشريحي",
+  theoretical: "نظري",
+  historical: "تاريخي",
+  linguistic: "لغوي/أدبي",
+  mixed: "مختلط",
+};
 
 export const Route = createFileRoute("/_authenticated/exams/new")({
   head: () => ({ meta: [{ title: "امتحان جديد — اختبرني" }] }),
