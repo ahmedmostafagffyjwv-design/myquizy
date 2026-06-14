@@ -330,6 +330,26 @@ function NewExam() {
       {step === 2 && (
         <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}>
           <Card className="p-6 space-y-6">
+            {analysis && (
+              <div className="rounded-xl border border-primary/30 bg-primary/5 p-4 space-y-2">
+                <div className="flex items-center gap-2 text-sm font-bold text-primary">
+                  <Brain className="w-4 h-4" /> تحليل المقرر التلقائي
+                </div>
+                <p className="text-sm">{analysis.summary_ar}</p>
+                <div className="flex flex-wrap gap-1.5 text-xs">
+                  <span className="rounded-full bg-primary/15 text-primary px-2 py-0.5 font-medium">
+                    {NATURE_LABELS[analysis.nature] ?? analysis.nature}
+                  </span>
+                  {analysis.focus_areas?.slice(0, 4).map((a, i) => (
+                    <span key={i} className="rounded-full bg-muted px-2 py-0.5">{a}</span>
+                  ))}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  الشكل المقترح: {SHAPE_OPTIONS.find(s => s.v === analysis.suggested_shape)?.l ?? analysis.suggested_shape}
+                </p>
+              </div>
+            )}
+
             <div>
               <Label>عنوان الامتحان</Label>
               <Input value={examTitle} onChange={(e) => setExamTitle(e.target.value)} className="mt-2" />
