@@ -386,6 +386,7 @@ ${content}
         question_count: questions.length,
         difficulty: data.difficulty,
         question_type: data.questionType,
+        question_shape: data.questionShape,
         status: "ready",
         is_retraining: data.isRetraining,
       })
