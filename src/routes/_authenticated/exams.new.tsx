@@ -45,6 +45,7 @@ function NewExam() {
   const generate = useServerFn(generateExam);
   const ocr = useServerFn(ocrImage);
   const assistQuestion = useServerFn(assistManualQuestion);
+  const analyze = useServerFn(analyzeSource);
 
   const [step, setStep] = useState<1 | 2>(1);
   const [file, setFile] = useState<File | null>(null);
@@ -57,7 +58,10 @@ function NewExam() {
   const [count, setCount] = useState(10);
   const [difficulty, setDifficulty] = useState<"easy" | "medium" | "hard" | "mixed">("mixed");
   const [qType, setQType] = useState<"mcq" | "essay" | "mixed">("mcq");
+  const [questionShape, setQuestionShape] = useState<"memorization" | "understanding" | "problems" | "visual" | "comparison" | "mixed">("mixed");
   const [generating, setGenerating] = useState(false);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [analysis, setAnalysis] = useState<{ nature: string; focus_areas: string[]; suggested_shape: string; summary_ar: string } | null>(null);
   const [manualQuestion, setManualQuestion] = useState("");
   const [assistMode, setAssistMode] = useState<"choices" | "similar">("choices");
   const [assisting, setAssisting] = useState(false);
