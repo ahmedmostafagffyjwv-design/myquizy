@@ -94,15 +94,29 @@ function NewExam() {
       toast.error("النص قصير جدًا (يجب ٢٠٠ حرف على الأقل)");
       return;
     }
-    if (!sourceTitle.trim()) sourceTitle && setSourceTitle("مصدر بدون عنوان");
+    if (!sourceTitle.trim()) setSourceTitle("مصدر بدون عنوان");
     setExamTitle(sourceTitle || "امتحان جديد");
+
+    // Auto-analyze the source content (best effort)
+    setAnalyzing(true);
+    try {
+      const result = await analyze({ data: { content: rawText.slice(0, 30000) } });
+      setAnalysis(result);
+      if (result.suggested_shape && questionShape === "mixed") {
+        setQuestionShape(result.suggested_shape as any);
+      }
+    } catch {
+      // ignore analysis failure, user can pick manually
+    } finally {
+      setAnalyzing(false);
+    }
     setStep(2);
   };
 
   const start = async () => {
     setGenerating(true);
     try {
-      // Save source
+      // Save source (include analysis if available)
       const { data: src, error: srcErr } = await supabase
         .from("sources")
         .insert({
@@ -111,6 +125,8 @@ function NewExam() {
           file_name: file?.name ?? null,
           content: rawText,
           char_count: rawText.length,
+          content_nature: analysis?.nature ?? null,
+          focus_areas: analysis?.focus_areas ?? null,
         })
         .select()
         .single();
@@ -124,6 +140,7 @@ function NewExam() {
           questionCount: count,
           difficulty,
           questionType: qType,
+          questionShape,
           isRetraining: false,
         },
       });
