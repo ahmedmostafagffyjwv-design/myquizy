@@ -8,13 +8,32 @@ import { Textarea } from "@/components/ui/textarea";
 import { Slider } from "@/components/ui/slider";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useServerFn } from "@tanstack/react-start";
-import { assistManualQuestion, generateExam, ocrImage } from "@/lib/exams.functions";
+import { analyzeSource, assistManualQuestion, generateExam, ocrImage } from "@/lib/exams.functions";
 import { supabase } from "@/integrations/supabase/client";
 import { extractTextFromFile, fileToBase64 } from "@/lib/file-extract";
 import { toast } from "sonner";
-import { Upload, FileText, Loader2, Sparkles, ListChecks, Wand2, CopyPlus } from "lucide-react";
+import { Upload, FileText, Loader2, Sparkles, ListChecks, Wand2, CopyPlus, Brain } from "lucide-react";
 import { motion } from "framer-motion";
 import { MixedLatex } from "@/components/math/Latex";
+
+const SHAPE_OPTIONS = [
+  { v: "memorization", l: "حفظ وتعريفات" },
+  { v: "understanding", l: "فهم وتحليل" },
+  { v: "problems", l: "مسائل وقوانين" },
+  { v: "visual", l: "رسوم وصور" },
+  { v: "comparison", l: "مقارنة واستنتاج" },
+  { v: "mixed", l: "مختلطة" },
+] as const;
+
+const NATURE_LABELS: Record<string, string> = {
+  mathematical: "رياضي/فيزيائي",
+  scientific: "علمي تجريبي",
+  biological: "أحيائي/تشريحي",
+  theoretical: "نظري",
+  historical: "تاريخي",
+  linguistic: "لغوي/أدبي",
+  mixed: "مختلط",
+};
 
 export const Route = createFileRoute("/_authenticated/exams/new")({
   head: () => ({ meta: [{ title: "امتحان جديد — اختبرني" }] }),
@@ -26,6 +45,7 @@ function NewExam() {
   const generate = useServerFn(generateExam);
   const ocr = useServerFn(ocrImage);
   const assistQuestion = useServerFn(assistManualQuestion);
+  const analyze = useServerFn(analyzeSource);
 
   const [step, setStep] = useState<1 | 2>(1);
   const [file, setFile] = useState<File | null>(null);
@@ -38,7 +58,10 @@ function NewExam() {
   const [count, setCount] = useState(10);
   const [difficulty, setDifficulty] = useState<"easy" | "medium" | "hard" | "mixed">("mixed");
   const [qType, setQType] = useState<"mcq" | "essay" | "mixed">("mcq");
+  const [questionShape, setQuestionShape] = useState<"memorization" | "understanding" | "problems" | "visual" | "comparison" | "mixed">("mixed");
   const [generating, setGenerating] = useState(false);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [analysis, setAnalysis] = useState<{ nature: string; focus_areas: string[]; suggested_shape: string; summary_ar: string } | null>(null);
   const [manualQuestion, setManualQuestion] = useState("");
   const [assistMode, setAssistMode] = useState<"choices" | "similar">("choices");
   const [assisting, setAssisting] = useState(false);
@@ -71,15 +94,29 @@ function NewExam() {
       toast.error("النص قصير جدًا (يجب ٢٠٠ حرف على الأقل)");
       return;
     }
-    if (!sourceTitle.trim()) sourceTitle && setSourceTitle("مصدر بدون عنوان");
+    if (!sourceTitle.trim()) setSourceTitle("مصدر بدون عنوان");
     setExamTitle(sourceTitle || "امتحان جديد");
+
+    // Auto-analyze the source content (best effort)
+    setAnalyzing(true);
+    try {
+      const result = await analyze({ data: { content: rawText.slice(0, 30000) } });
+      setAnalysis(result);
+      if (result.suggested_shape && questionShape === "mixed") {
+        setQuestionShape(result.suggested_shape as any);
+      }
+    } catch {
+      // ignore analysis failure, user can pick manually
+    } finally {
+      setAnalyzing(false);
+    }
     setStep(2);
   };
 
   const start = async () => {
     setGenerating(true);
     try {
-      // Save source
+      // Save source (include analysis if available)
       const { data: src, error: srcErr } = await supabase
         .from("sources")
         .insert({
@@ -88,6 +125,8 @@ function NewExam() {
           file_name: file?.name ?? null,
           content: rawText,
           char_count: rawText.length,
+          content_nature: analysis?.nature ?? null,
+          focus_areas: analysis?.focus_areas ?? null,
         })
         .select()
         .single();
@@ -101,6 +140,7 @@ function NewExam() {
           questionCount: count,
           difficulty,
           questionType: qType,
+          questionShape,
           isRetraining: false,
         },
       });
@@ -278,8 +318,10 @@ function NewExam() {
               )}
             </Card>
 
-            <Button onClick={goToSetup} disabled={extracting || rawText.length < 200} className="w-full" size="lg">
-              {extracting ? <><Loader2 className="w-4 h-4 animate-spin ml-2" /> جارٍ الاستخراج...</> : "التالي"}
+            <Button onClick={goToSetup} disabled={extracting || analyzing || rawText.length < 200} className="w-full" size="lg">
+              {extracting ? <><Loader2 className="w-4 h-4 animate-spin ml-2" /> جارٍ الاستخراج...</>
+                : analyzing ? <><Loader2 className="w-4 h-4 animate-spin ml-2" /> جارٍ تحليل المقرر...</>
+                : "التالي"}
             </Button>
           </Card>
         </motion.div>
@@ -288,6 +330,26 @@ function NewExam() {
       {step === 2 && (
         <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}>
           <Card className="p-6 space-y-6">
+            {analysis && (
+              <div className="rounded-xl border border-primary/30 bg-primary/5 p-4 space-y-2">
+                <div className="flex items-center gap-2 text-sm font-bold text-primary">
+                  <Brain className="w-4 h-4" /> تحليل المقرر التلقائي
+                </div>
+                <p className="text-sm">{analysis.summary_ar}</p>
+                <div className="flex flex-wrap gap-1.5 text-xs">
+                  <span className="rounded-full bg-primary/15 text-primary px-2 py-0.5 font-medium">
+                    {NATURE_LABELS[analysis.nature] ?? analysis.nature}
+                  </span>
+                  {analysis.focus_areas?.slice(0, 4).map((a, i) => (
+                    <span key={i} className="rounded-full bg-muted px-2 py-0.5">{a}</span>
+                  ))}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  الشكل المقترح: {SHAPE_OPTIONS.find(s => s.v === analysis.suggested_shape)?.l ?? analysis.suggested_shape}
+                </p>
+              </div>
+            )}
+
             <div>
               <Label>عنوان الامتحان</Label>
               <Input value={examTitle} onChange={(e) => setExamTitle(e.target.value)} className="mt-2" />
@@ -335,6 +397,20 @@ function NewExam() {
                 ))}
               </RadioGroup>
             </div>
+
+            <div>
+              <Label className="mb-3 block">شكل الأسئلة</Label>
+              <RadioGroup value={questionShape} onValueChange={(v: any) => setQuestionShape(v)} className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                {SHAPE_OPTIONS.map((o) => (
+                  <label key={o.v} className={`border rounded-lg p-3 cursor-pointer text-center text-sm transition-colors ${questionShape === o.v ? "border-primary bg-primary/10 text-primary font-bold" : "hover:bg-accent"} ${analysis?.suggested_shape === o.v ? "ring-1 ring-primary/40" : ""}`}>
+                    <RadioGroupItem value={o.v} className="sr-only" />
+                    {o.l}
+                    {analysis?.suggested_shape === o.v && <span className="block text-[10px] text-primary mt-0.5">مقترح</span>}
+                  </label>
+                ))}
+              </RadioGroup>
+            </div>
+
 
             <div className="flex gap-2">
               <Button variant="outline" onClick={() => setStep(1)} disabled={generating} className="flex-1">السابق</Button>

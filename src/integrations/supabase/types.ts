@@ -74,6 +74,7 @@ export type Database = {
           id: string
           is_retraining: boolean
           question_count: number
+          question_shape: string
           question_type: string
           score: number | null
           source_id: string | null
@@ -90,6 +91,7 @@ export type Database = {
           id?: string
           is_retraining?: boolean
           question_count: number
+          question_shape?: string
           question_type: string
           score?: number | null
           source_id?: string | null
@@ -106,6 +108,7 @@ export type Database = {
           id?: string
           is_retraining?: boolean
           question_count?: number
+          question_shape?: string
           question_type?: string
           score?: number | null
           source_id?: string | null
@@ -208,8 +211,10 @@ export type Database = {
         Row: {
           char_count: number
           content: string
+          content_nature: string | null
           created_at: string
           file_name: string | null
+          focus_areas: Json | null
           id: string
           title: string
           user_id: string
@@ -217,8 +222,10 @@ export type Database = {
         Insert: {
           char_count?: number
           content: string
+          content_nature?: string | null
           created_at?: string
           file_name?: string | null
+          focus_areas?: Json | null
           id?: string
           title: string
           user_id: string
@@ -226,8 +233,10 @@ export type Database = {
         Update: {
           char_count?: number
           content?: string
+          content_nature?: string | null
           created_at?: string
           file_name?: string | null
+          focus_areas?: Json | null
           id?: string
           title?: string
           user_id?: string
