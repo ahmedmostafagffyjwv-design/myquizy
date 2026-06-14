@@ -318,8 +318,10 @@ function NewExam() {
               )}
             </Card>
 
-            <Button onClick={goToSetup} disabled={extracting || rawText.length < 200} className="w-full" size="lg">
-              {extracting ? <><Loader2 className="w-4 h-4 animate-spin ml-2" /> جارٍ الاستخراج...</> : "التالي"}
+            <Button onClick={goToSetup} disabled={extracting || analyzing || rawText.length < 200} className="w-full" size="lg">
+              {extracting ? <><Loader2 className="w-4 h-4 animate-spin ml-2" /> جارٍ الاستخراج...</>
+                : analyzing ? <><Loader2 className="w-4 h-4 animate-spin ml-2" /> جارٍ تحليل المقرر...</>
+                : "التالي"}
             </Button>
           </Card>
         </motion.div>
