@@ -46,6 +46,15 @@ export const ocrImage = createServerFn({ method: "POST" })
   });
 
 // ---------- Generate exam questions ----------
+const QUESTION_SHAPES = [
+  "memorization",
+  "understanding",
+  "problems",
+  "visual",
+  "comparison",
+  "mixed",
+] as const;
+
 const GenInput = z.object({
   sourceId: z.string().uuid(),
   title: z.string().min(1).max(200),
@@ -53,6 +62,7 @@ const GenInput = z.object({
   questionCount: z.number().int().min(1).max(30),
   difficulty: z.enum(["easy", "medium", "hard", "mixed"]),
   questionType: z.enum(["mcq", "essay", "mixed"]),
+  questionShape: z.enum(QUESTION_SHAPES).default("mixed"),
   isRetraining: z.boolean().default(false),
   weakQuestionIds: z.array(z.string().uuid()).optional(),
 });
