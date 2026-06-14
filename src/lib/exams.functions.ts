@@ -530,3 +530,74 @@ ${data.questionText}
 
     return { mode: "similar" as const, ...object };
   });
+
+// ---------- Analyze source to detect course nature ----------
+const AnalyzeInput = z.object({
+  sourceId: z.string().uuid().optional(),
+  content: z.string().min(50).max(40000).optional(),
+}).refine((d) => d.sourceId || d.content, { message: "أدخل sourceId أو content" });
+
+const analyzeSchema = z.object({
+  nature: z.enum([
+    "mathematical",   // رياضيات/فيزياء
+    "scientific",     // علوم تجريبية
+    "biological",     // أحياء/تشريح
+    "theoretical",    // مادة نظرية
+    "historical",     // تاريخ/أحداث
+    "linguistic",     // لغة/أدب
+    "mixed",
+  ]).describe("طبيعة المقرر الأساسية"),
+  focus_areas: z.array(z.string()).min(1).max(5).describe("مجالات التركيز الرئيسية في النص"),
+  suggested_shape: z.enum([
+    "memorization", "understanding", "problems", "visual", "comparison", "mixed",
+  ]).describe("شكل الأسئلة الأنسب لطبيعة هذا المقرر"),
+  summary_ar: z.string().describe("جملة عربية قصيرة تصف طبيعة المقرر للمستخدم"),
+});
+
+export const analyzeSource = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => AnalyzeInput.parse(d))
+  .handler(async ({ data, context }) => {
+    const { supabase, userId } = context;
+    let content = data.content ?? "";
+
+    if (data.sourceId) {
+      const { data: src, error } = await supabase
+        .from("sources")
+        .select("content")
+        .eq("id", data.sourceId)
+        .single();
+      if (error || !src) throw new Error("لم يتم العثور على المصدر");
+      content = src.content || "";
+    }
+
+    const sample = content.slice(0, 8000);
+    const gateway = getGateway();
+
+    const { object } = await generateObject({
+      model: gateway(MODEL),
+      schema: analyzeSchema,
+      system: `أنت محلل محتوى تعليمي. حلّل النص واستخرج طبيعته الأكاديمية ومجالات التركيز فيه.
+- "mathematical" للنصوص الغنية بالقوانين والمعادلات والمسائل الحسابية.
+- "biological" للنصوص التي تركز على التشريح والكائنات الحية والصور التوضيحية.
+- "theoretical" للنصوص النظرية المفاهيمية.
+- "historical" للأحداث والتواريخ والسير.
+- "linguistic" للغة والنحو والأدب.
+- اقترح أنسب شكل أسئلة بناءً على ذلك.`,
+      prompt: `حلّل هذا النص:\n"""\n${sample}\n"""`,
+    });
+
+    if (data.sourceId) {
+      await supabase
+        .from("sources")
+        .update({
+          content_nature: object.nature,
+          focus_areas: object.focus_areas,
+        })
+        .eq("id", data.sourceId)
+        .eq("user_id", userId);
+    }
+
+    return object;
+  });
+
