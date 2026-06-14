@@ -261,12 +261,12 @@ export const generateExam = createServerFn({ method: "POST" })
     // Fetch source
     const { data: src, error: srcErr } = await supabase
       .from("sources")
-      .select("id, content, title")
+      .select("id, content, title, content_nature, focus_areas")
       .eq("id", data.sourceId)
       .single();
     if (srcErr || !src) throw new Error("لم يتم العثور على المصدر");
 
-    const content = (src.content || "").slice(0, 30000); // cap to reduce latency/truncation risk
+    const content = (src.content || "").slice(0, 30000);
 
     const difficultyAr =
       data.difficulty === "easy" ? "سهلة"
@@ -279,19 +279,40 @@ export const generateExam = createServerFn({ method: "POST" })
       : data.questionType === "essay" ? "أسئلة مقالية فقط (essay)، بدون خيارات"
       : "مزيج: نصف الأسئلة تقريبًا اختيار من متعدد والنصف الآخر مقالية";
 
+    const shapeGuidance: Record<string, string> = {
+      memorization: "ركّز على **الحفظ والتعريفات والمصطلحات والتواريخ والأسماء**. اسأل عن تعريف X، ما هو Y، من هو Z، متى حدث كذا.",
+      understanding: "ركّز على **الفهم والتحليل والتفسير**. اسأل لماذا، وكيف، وما السبب، واستنتج المعنى من السياق.",
+      problems: "ركّز على **المسائل الحسابية والقوانين والمعادلات**. اسأل أسئلة تطبيقية تتطلب حساباً أو تطبيق قانون. استخدم LaTeX بين $...$ لأي رمز أو معادلة.",
+      visual: "ركّز على **وصف الرسوم والأشكال والمخططات** المذكورة في النص. اسأل عن مكونات الشكل، عن العلاقات في المخطط، عن قراءة الرسم البياني.",
+      comparison: "ركّز على **المقارنة والاستنتاج**. اسأل بصيغ مثل: ما الفرق بين X و Y، قارن بين، ماذا يحدث لو، استنتج من المعطيات.",
+      mixed: "نوّع بين الحفظ والفهم والمسائل والمقارنة بنسب متوازنة.",
+    };
+
+    const shapeAr = shapeGuidance[data.questionShape] ?? shapeGuidance.mixed;
+
+    const focusInfo = src.content_nature
+      ? `\n- طبيعة المقرر المكتشفة تلقائياً: ${src.content_nature}${
+          Array.isArray(src.focus_areas) && src.focus_areas.length
+            ? ` (مجالات التركيز: ${(src.focus_areas as string[]).join("، ")})`
+            : ""
+        }\n- وزّع الأسئلة بما يتناسب مع هذه الطبيعة.`
+      : "";
+
     const systemPrompt = `أنت مولّد امتحانات تعليمية. قواعد صارمة لا يجوز خرقها أبدًا:
 1. اعتمد **فقط** على النص المرفق كمصدر للحقائق والأسئلة والإجابات.
 2. لا تستخدم أي معلومة من خارج النص. لا تخمّن. لا تكمّل من معرفتك العامة.
 3. لكل سؤال يجب أن تُرجع \`source_excerpt\`: المقطع الحرفي من النص الذي بنيت عليه السؤال.
 4. إذا لم يحتوِ النص على معلومات كافية، أرجع عددًا أقل من الأسئلة بدلًا من اختلاق محتوى.
 5. الأسئلة والإجابات والشرح كله باللغة العربية الفصحى الواضحة.
-6. لأسئلة MCQ: 4 خيارات، خيار واحد فقط صحيح، و\`correct_answer\` يطابق نص الخيار الصحيح تمامًا.
+6. لأسئلة MCQ: 4 خيارات متمايزة وواقعية (مشتتات قوية وليست واضحة الخطأ)، خيار واحد فقط صحيح، و\`correct_answer\` يطابق نص الخيار الصحيح تمامًا.
 7. لأسئلة المقال: \`correct_answer\` هو الإجابة النموذجية المختصرة.
-8. إذا تضمّن النص المصدر رياضيات أو معادلات أو رموزًا علمية، فاكتب كل معادلة أو رمز بصيغة LaTeX بين علامتي $...$ (مثال: $x^2 - 5x + 6 = 0$) داخل نص السؤال والخيارات والإجابة والشرح.`;
+8. إذا تضمّن النص رياضيات أو معادلات أو رموزًا علمية، فاكتب كل معادلة بصيغة LaTeX بين $...$.
+9. ممنوع تكرار نفس الفكرة أو نفس الصياغة في أكثر من سؤال.
+10. شكل الأسئلة المطلوب: ${shapeAr}`;
 
     const userPrompt = `ولّد امتحانًا بـ${data.questionCount} سؤال.
 - نوع الأسئلة: ${typeAr}
-- مستوى الصعوبة: ${difficultyAr}
+- مستوى الصعوبة: ${difficultyAr}${focusInfo}
 
 النص المصدر:
 """
