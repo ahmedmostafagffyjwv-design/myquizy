@@ -1,0 +1,20 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1792586663383,
+      "tag": "0000_integrity_events_and_source_images",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1792586672882,
+      "tag": "0001_source_images_storage_policies",
+      "breakpoints": true
+    }
+  ]
+}
