@@ -127,6 +127,39 @@ export type Database = {
           },
         ]
       }
+      integrity_events: {
+        Row: {
+          attempt_type: string
+          created_at: string
+          exam_continued: boolean
+          exam_id: string
+          id: string
+          key_pressed: string | null
+          user_id: string
+          warning_shown: boolean
+        }
+        Insert: {
+          attempt_type: string
+          created_at?: string
+          exam_continued?: boolean
+          exam_id: string
+          id?: string
+          key_pressed?: string | null
+          user_id: string
+          warning_shown?: boolean
+        }
+        Update: {
+          attempt_type?: string
+          created_at?: string
+          exam_continued?: boolean
+          exam_id?: string
+          id?: string
+          key_pressed?: string | null
+          user_id?: string
+          warning_shown?: boolean
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           avatar_url: string | null
@@ -216,6 +249,7 @@ export type Database = {
           file_name: string | null
           focus_areas: Json | null
           id: string
+          image_urls: Json | null
           title: string
           user_id: string
         }
@@ -227,6 +261,7 @@ export type Database = {
           file_name?: string | null
           focus_areas?: Json | null
           id?: string
+          image_urls?: Json | null
           title: string
           user_id: string
         }
@@ -238,6 +273,7 @@ export type Database = {
           file_name?: string | null
           focus_areas?: Json | null
           id?: string
+          image_urls?: Json | null
           title?: string
           user_id?: string
         }
