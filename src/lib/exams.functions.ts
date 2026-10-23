@@ -65,6 +65,7 @@ const GenInput = z.object({
   questionShape: z.enum(QUESTION_SHAPES).default("mixed"),
   isRetraining: z.boolean().default(false),
   weakQuestionIds: z.array(z.string().uuid()).optional(),
+  imageUrls: z.array(z.string()).max(8).optional(),
 });
 
 const ManualQuestionAssistInput = z.object({
@@ -82,6 +83,7 @@ const questionSchema = z.object({
   correct_answer: z.string().describe("For MCQ: the exact correct option text. For essay: a model answer."),
   explanation: z.string(),
   source_excerpt: z.string().describe("The exact passage from the source that this question is based on."),
+  image_url: z.string().optional().describe("The reference URL of the image this question is based on, when provided."),
 });
 
 const examSchema = z.object({
@@ -111,6 +113,16 @@ const difficultyMap: Record<string, "easy" | "medium" | "hard"> = {
   "صعب": "hard",
   "صعبة": "hard",
 };
+
+function arrayBufferToBase64(buf: ArrayBuffer) {
+  const bytes = new Uint8Array(buf);
+  let binary = "";
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
+  }
+  return btoa(binary);
+}
 
 function extractJsonValue(raw: string) {
   const cleaned = raw
@@ -208,6 +220,7 @@ function normalizeExamPayload(payload: unknown) {
     correct_answer: string;
     explanation: string;
     source_excerpt: string;
+    image_url: string;
   };
 
   const rawQuestions = Array.isArray(payload)
@@ -240,6 +253,7 @@ function normalizeExamPayload(payload: unknown) {
         correct_answer: correctAnswer,
         explanation: String((question as any)?.explanation ?? (question as any)?.reasoning ?? (question as any)?.rationale ?? "").trim(),
         source_excerpt: String((question as any)?.source_excerpt ?? (question as any)?.sourceExcerpt ?? (question as any)?.excerpt ?? (question as any)?.reference ?? "").trim(),
+        image_url: String((question as any)?.image_url ?? (question as any)?.imageUrl ?? "").trim(),
       };
     })
     .filter((question: NormalizedQuestion) => {
@@ -267,6 +281,21 @@ export const generateExam = createServerFn({ method: "POST" })
     if (srcErr || !src) throw new Error("لم يتم العثور على المصدر");
 
     const content = (src.content || "").slice(0, 30000);
+
+    // Embedded images (Module: scan/document) — fetched server-side for visual question generation
+    const imageUrls = (data.imageUrls ?? []).slice(0, 8);
+    const imageDataUrls: { url: string; dataUrl: string }[] = [];
+    for (const url of imageUrls) {
+      try {
+        const res = await fetch(url);
+        if (!res.ok) continue;
+        const mime = res.headers.get("content-type") || "image/jpeg";
+        if (!mime.startsWith("image/")) continue;
+        imageDataUrls.push({ url, dataUrl: `data:${mime};base64,${arrayBufferToBase64(await res.arrayBuffer())}` });
+      } catch {
+        // skip broken image links
+      }
+    }
 
     const difficultyAr =
       data.difficulty === "easy" ? "سهلة"
@@ -319,6 +348,15 @@ export const generateExam = createServerFn({ method: "POST" })
 ${content}
 """`;
 
+    const imageUrlsListing = imageDataUrls.map((im, i) => `- الصورة ${i + 1} رابطها المرجعي: ${im.url}`).join("\n");
+    const imageInstruction = imageDataUrls.length
+      ? `\n\nالمصدر يتضمن ${imageDataUrls.length} صورة/رسمًا مرفقة بهذه الرسالة:
+${imageUrlsListing}
+- تعامل مع الصور كمصدر أساسي مثل النص: ولّد جزءًا من الأسئلة مبنيًا على تحليلها (وصف مكوّناتها، تفسيرها، تسمية أجزائها، استنتاج ما توضحه، أو ربطها بالنص).
+- أي سؤال يعتمد على صورة يجب أن يحتوي حقل image_url على رابط تلك الصورة حرفيًا كما هو مذكور أعلاه، وحرفيًا يعني نفس السلسلة النصية بالكامل.
+- لا تختلق محتوى غير موجود في الصور أو النص.`
+      : "";
+
     const gateway = getGateway();
     const jsonInstruction = `\n\nأرجع **فقط** كائن JSON صالح بالشكل التالي بدون أي نص إضافي أو علامات code fence:
 {
@@ -330,7 +368,8 @@ ${content}
       "options": ["...", "...", "...", "..."],
       "correct_answer": "...",
       "explanation": "...",
-      "source_excerpt": "..."
+      "source_excerpt": "...",
+      "image_url": "رابط الصورة المرجعي فقط إذا كان السؤال مبنيًا على صورة، وإلا فاحذف الحقل"
     }
   ]
 }
@@ -348,7 +387,15 @@ ${content}
         const { text } = await generateText({
           model: gateway(MODEL),
           system: systemPrompt + jsonInstruction,
-          prompt: userPrompt + retryInstruction,
+          messages: [
+            {
+              role: "user",
+              content: [
+                { type: "text", text: userPrompt + imageInstruction + retryInstruction },
+                ...imageDataUrls.map((im) => ({ type: "image" as const, image: im.dataUrl })),
+              ] as any,
+            },
+          ] as any,
         });
 
         const parsed = extractJsonValue(text);
@@ -356,7 +403,11 @@ ${content}
         const validation = examSchema.safeParse(normalized);
 
         if (validation.success && validation.data.questions.length > 0) {
-          questions = validation.data.questions;
+          const allowed = new Set(imageUrls);
+          questions = validation.data.questions.map((q) => ({
+            ...q,
+            image_url: q.image_url && allowed.has(q.image_url) ? q.image_url : undefined,
+          }));
           break;
         }
 
@@ -406,6 +457,7 @@ ${content}
       correct_answer: q.correct_answer,
       explanation: q.explanation,
       source_excerpt: q.source_excerpt,
+      image_url: q.image_url ?? null,
     }));
     const { error: qErr } = await supabase.from("questions").insert(rows);
     if (qErr) throw new Error("فشل حفظ الأسئلة: " + qErr.message);
@@ -413,16 +465,23 @@ ${content}
     return { examId: exam.id, questionCount: questions.length };
   });
 
-// ---------- Grade essay answer ----------
+// ---------- Grade essay answer (flexible idea-based grading) ----------
 const GradeInput = z.object({
   questionId: z.string().uuid(),
   userAnswer: z.string(),
+  gradingMode: z.enum(["FLEXIBLE_IDEA_BASED", "STRICT_EXACT"]).default("FLEXIBLE_IDEA_BASED"),
+  tolerance: z.number().min(0.5).max(1).default(0.85),
+});
+
+const gradeFeedbackSchema = z.object({
+  strengths: z.array(z.string()).describe("نقاط القوة في إجابة الطالب، قد تكون فارغة"),
+  improvements: z.array(z.string()).describe("ما ينقص الإجابة وكيف يتحسّن"),
+  note: z.string().describe("ملاحظة ختامية قصيرة بالعربية"),
 });
 
 const gradeSchema = z.object({
-  score: z.number().min(0).max(10),
-  is_correct: z.boolean().describe("true if score >= 7"),
-  feedback: z.string(),
+  score: z.number().min(0).max(10).describe("الدرجة النهائية بخطوات 0.25"),
+  feedback: gradeFeedbackSchema,
 });
 
 const manualChoicesSchema = z.object({
@@ -461,19 +520,37 @@ export const gradeEssay = createServerFn({ method: "POST" })
     const { object } = await generateObject({
       model: gateway(MODEL),
       schema: gradeSchema,
-      system: "أنت مصحّح امتحانات منصف وعادل. قيّم إجابة الطالب بالمقارنة مع الإجابة النموذجية والمقطع المرجعي فقط. أعط درجة من 10 وملاحظات بناءة بالعربية.",
+      system: `أنت مصحّح امتحانات مقالية يعمل بنظام "التصحيح المرن القائم على الأفكار".
+- قيّم إجابة الطالب مقارنةً بالإجابة النموذجية والمقطع المرجعي فقط.
+- قيّم الأفكار والمفاهيم لا الألفاظ: اقبل المرادفات والصياغات المختلفة وأي ترتيب للأفكار.
+- صحّح كل فكرة مطلوبة على حدة واجمع الدرجات الجزئية (سلم جزئي).
+- سلم الدرجات من 10:
+  10: إجابة كاملة صحيحة تغطي الفكرة الأساسية والتفاصيل الداعمة
+  8.5: الفكرة الأساسية واضحة مع بعض التفاصيل الداعمة أو أخطاء طفيفة
+  7: الفكرة الأساسية واضحة دون تفاصيل داعمة
+  5.5: فهم جزئي مع أخطاء أو نسيان أهم نقطة
+  3: فهم ضعيف ومعلومات عامة فقط
+  1: محاولة بسيطة بلا فهم حقيقي
+  0: لا إجابة أو إجابة غير مرتبطة تمامًا بالسؤال
+- استخدم درجات بخطوات 0.25 فقط (مثل 6.75 أو 7.25)، وأعطِ فائدة الشك للطالب عند التردد بين درجتين.
+- في الوضع FLEXIBLE_IDEA_BASED لا تخصم درجة لاختلاف التعبير أو الترتيب. في وضع STRICT_EXACT فقط تشترط مطابقة الصياغة الدقيقة.
+- اكتب كل الملاحظات بالعربية الفصحى، وإذا احتوت معادلات فاكتبها بصيغة LaTeX بين $...$.`,
       prompt: `السؤال: ${q.question_text}
 
 الإجابة النموذجية: ${q.correct_answer}
 
-المقطع المرجعي: ${q.source_excerpt}
+المقطع المرجعي من المصدر: ${q.source_excerpt}
 
-إجابة الطالب: ${data.userAnswer}
+إجابة الطالب:
+${data.userAnswer}
 
-قيّم الإجابة من 10 واعتبرها صحيحة إذا كانت ≥ 7.`,
+صحّح الإجابة بمرونة قائمة على الأفكار وفق سلم الدرجات، وأعد الدرجة من 10 بخطوات 0.25 مع feedback منظم (strengths / improvements / note).`,
     });
 
-    return object;
+    // decimal score in 0.25 steps; the tolerance fraction of max score decides correctness
+    const score = Math.round(object.score * 4) / 4;
+    const isCorrect = score / 10 >= data.tolerance;
+    return { score, is_correct: isCorrect, feedback: object.feedback };
   });
 
 export const assistManualQuestion = createServerFn({ method: "POST" })
