@@ -465,16 +465,23 @@ ${imageUrlsListing}
     return { examId: exam.id, questionCount: questions.length };
   });
 
-// ---------- Grade essay answer ----------
+// ---------- Grade essay answer (flexible idea-based grading) ----------
 const GradeInput = z.object({
   questionId: z.string().uuid(),
   userAnswer: z.string(),
+  gradingMode: z.enum(["FLEXIBLE_IDEA_BASED", "STRICT_EXACT"]).default("FLEXIBLE_IDEA_BASED"),
+  tolerance: z.number().min(0.5).max(1).default(0.85),
+});
+
+const gradeFeedbackSchema = z.object({
+  strengths: z.array(z.string()).describe("نقاط القوة في إجابة الطالب، قد تكون فارغة"),
+  improvements: z.array(z.string()).describe("ما ينقص الإجابة وكيف يتحسّن"),
+  note: z.string().describe("ملاحظة ختامية قصيرة بالعربية"),
 });
 
 const gradeSchema = z.object({
-  score: z.number().min(0).max(10),
-  is_correct: z.boolean().describe("true if score >= 7"),
-  feedback: z.string(),
+  score: z.number().min(0).max(10).describe("الدرجة النهائية بخطوات 0.25"),
+  feedback: gradeFeedbackSchema,
 });
 
 const manualChoicesSchema = z.object({
