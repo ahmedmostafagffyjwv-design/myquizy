@@ -8,6 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Progress } from "@/components/ui/progress";
 import { useServerFn } from "@tanstack/react-start";
 import { gradeEssay } from "@/lib/exams.functions";
+import { useSecureExamSession } from "@/lib/exam-security";
 import { saveAttempt, finishExam } from "@/lib/attempts.functions";
 import { toast } from "sonner";
 import { Clock, ChevronLeft, ChevronRight, Loader2, BookOpen, CheckCircle2 } from "lucide-react";
@@ -29,6 +30,7 @@ type Q = {
   correct_answer: string;
   explanation: string | null;
   source_excerpt: string | null;
+  image_url: string | null;
 };
 
 function TakeExam() {
@@ -60,6 +62,10 @@ function TakeExam() {
   const submittedRef = useRef(false);
   const submitRef = useRef<() => void>(() => {});
 
+  // Anti-cheat session: active while taking the exam, restored on submit
+  const examActive = !!data?.exam && data.exam.status !== "completed" && !submitting;
+  useSecureExamSession(data?.exam ? id : undefined, examActive);
+
   const questions = data?.questions ?? [];
   const current = questions[idx];
   const answered = useMemo(() => Object.keys(answers).filter((k) => answers[k]?.trim()).length, [answers]);
@@ -84,8 +90,8 @@ function TakeExam() {
             return save({ data: { examId: id, questionId: q.id, userAnswer: ans, isCorrect, score: isCorrect ? 10 : 0 } });
           }
           try {
-            const g = await grade({ data: { questionId: q.id, userAnswer: ans } });
-            return save({ data: { examId: id, questionId: q.id, userAnswer: ans, isCorrect: g.is_correct, score: g.score, aiFeedback: g.feedback } });
+            const g = await grade({ data: { questionId: q.id, userAnswer: ans, gradingMode: "FLEXIBLE_IDEA_BASED", tolerance: 0.85 } });
+            return save({ data: { examId: id, questionId: q.id, userAnswer: ans, isCorrect: g.is_correct, score: g.score, aiFeedback: JSON.stringify(g.feedback) } });
           } catch {
             return save({ data: { examId: id, questionId: q.id, userAnswer: ans, isCorrect: false, score: 0, aiFeedback: "تعذّر التصحيح التلقائي" } });
           }
@@ -211,7 +217,16 @@ function TakeExam() {
                 )}
               </div>
 
-              <h2 className="text-lg md:text-xl font-bold leading-relaxed"><MixedLatex text={current.question_text} /></h2>
+              <h2 className="text-lg md:text-xl font-bold leading-relaxed select-none"><MixedLatex text={current.question_text} /></h2>
+
+              {current.image_url && (
+                <img
+                  src={current.image_url}
+                  alt="صورة السؤال"
+                  className="rounded-xl border max-h-80 w-auto mx-auto select-none"
+                  draggable={false}
+                />
+              )}
 
               {showSource && current.source_excerpt && (
                 <div className="text-sm bg-muted p-3 rounded-lg border-r-4 border-primary text-muted-foreground italic">
@@ -227,7 +242,7 @@ function TakeExam() {
                       <button
                         key={i}
                         onClick={() => setAnswers((a) => ({ ...a, [current.id]: opt }))}
-                        className={`w-full text-right p-4 rounded-xl border transition-all ${selected ? "border-primary bg-primary/10 font-bold text-primary" : "hover:border-primary/50 hover:bg-accent/30"}`}
+                        className={`w-full text-right p-4 rounded-xl border transition-all select-none ${selected ? "border-primary bg-primary/10 font-bold text-primary" : "hover:border-primary/50 hover:bg-accent/30"}`}
                       >
                         <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-muted text-xs ml-3 font-bold">
                           {["أ", "ب", "ج", "د"][i]}
