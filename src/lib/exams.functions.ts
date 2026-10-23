@@ -282,6 +282,21 @@ export const generateExam = createServerFn({ method: "POST" })
 
     const content = (src.content || "").slice(0, 30000);
 
+    // Embedded images (Module: scan/document) — fetched server-side for visual question generation
+    const imageUrls = (data.imageUrls ?? []).slice(0, 8);
+    const imageDataUrls: { url: string; dataUrl: string }[] = [];
+    for (const url of imageUrls) {
+      try {
+        const res = await fetch(url);
+        if (!res.ok) continue;
+        const mime = res.headers.get("content-type") || "image/jpeg";
+        if (!mime.startsWith("image/")) continue;
+        imageDataUrls.push({ url, dataUrl: `data:${mime};base64,${arrayBufferToBase64(await res.arrayBuffer())}` });
+      } catch {
+        // skip broken image links
+      }
+    }
+
     const difficultyAr =
       data.difficulty === "easy" ? "سهلة"
       : data.difficulty === "medium" ? "متوسطة"
@@ -333,6 +348,15 @@ export const generateExam = createServerFn({ method: "POST" })
 ${content}
 """`;
 
+    const imageUrlsListing = imageDataUrls.map((im, i) => `- الصورة ${i + 1} رابطها المرجعي: ${im.url}`).join("\n");
+    const imageInstruction = imageDataUrls.length
+      ? `\n\nالمصدر يتضمن ${imageDataUrls.length} صورة/رسمًا مرفقة بهذه الرسالة:
+${imageUrlsListing}
+- تعامل مع الصور كمصدر أساسي مثل النص: ولّد جزءًا من الأسئلة مبنيًا على تحليلها (وصف مكوّناتها، تفسيرها، تسمية أجزائها، استنتاج ما توضحه، أو ربطها بالنص).
+- أي سؤال يعتمد على صورة يجب أن يحتوي حقل image_url على رابط تلك الصورة حرفيًا كما هو مذكور أعلاه، وحرفيًا يعني نفس السلسلة النصية بالكامل.
+- لا تختلق محتوى غير موجود في الصور أو النص.`
+      : "";
+
     const gateway = getGateway();
     const jsonInstruction = `\n\nأرجع **فقط** كائن JSON صالح بالشكل التالي بدون أي نص إضافي أو علامات code fence:
 {
@@ -344,7 +368,8 @@ ${content}
       "options": ["...", "...", "...", "..."],
       "correct_answer": "...",
       "explanation": "...",
-      "source_excerpt": "..."
+      "source_excerpt": "...",
+      "image_url": "رابط الصورة المرجعي فقط إذا كان السؤال مبنيًا على صورة، وإلا فاحذف الحقل"
     }
   ]
 }
@@ -362,7 +387,15 @@ ${content}
         const { text } = await generateText({
           model: gateway(MODEL),
           system: systemPrompt + jsonInstruction,
-          prompt: userPrompt + retryInstruction,
+          messages: [
+            {
+              role: "user",
+              content: [
+                { type: "text", text: userPrompt + imageInstruction + retryInstruction },
+                ...imageDataUrls.map((im) => ({ type: "image" as const, image: im.dataUrl })),
+              ] as any,
+            },
+          ] as any,
         });
 
         const parsed = extractJsonValue(text);
@@ -370,7 +403,11 @@ ${content}
         const validation = examSchema.safeParse(normalized);
 
         if (validation.success && validation.data.questions.length > 0) {
-          questions = validation.data.questions;
+          const allowed = new Set(imageUrls);
+          questions = validation.data.questions.map((q) => ({
+            ...q,
+            image_url: q.image_url && allowed.has(q.image_url) ? q.image_url : undefined,
+          }));
           break;
         }
 
@@ -420,6 +457,7 @@ ${content}
       correct_answer: q.correct_answer,
       explanation: q.explanation,
       source_excerpt: q.source_excerpt,
+      image_url: q.image_url ?? null,
     }));
     const { error: qErr } = await supabase.from("questions").insert(rows);
     if (qErr) throw new Error("فشل حفظ الأسئلة: " + qErr.message);
