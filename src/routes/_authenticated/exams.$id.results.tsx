@@ -124,6 +124,9 @@ function Results() {
                 </div>
                 <div className="flex-1 min-w-0 space-y-2">
                   <p className="font-bold">{i + 1}. <MixedLatex text={q.question_text} /></p>
+                  {q.image_url && (
+                    <img src={q.image_url} alt="صورة السؤال" className="rounded-lg border max-h-72 w-auto" draggable={false} />
+                  )}
                   <div className="text-sm">
                     <p className="text-muted-foreground">إجابتك:</p>
                     <p className={ok ? "text-success" : "text-destructive"}>
@@ -142,13 +145,44 @@ function Results() {
                       <p className="text-muted-foreground"><MixedLatex text={q.explanation} /></p>
                     </div>
                   )}
-                  {a?.ai_feedback && (
-                    <div className="text-sm bg-accent/40 rounded-lg p-3">
-                      <p className="font-medium mb-1">ملاحظات المصحّح:</p>
-                      <p className="text-muted-foreground">{a.ai_feedback}</p>
-                      {a.score !== null && <p className="text-xs mt-1 font-bold">الدرجة: {a.score}/10</p>}
-                    </div>
-                  )}
+                  {a?.ai_feedback && (() => {
+                    let fb: { strengths?: string[]; improvements?: string[]; note?: string } | null = null;
+                    try {
+                      const parsed = JSON.parse(a.ai_feedback);
+                      if (parsed && (parsed.strengths || parsed.improvements || parsed.note)) fb = parsed;
+                    } catch {
+                      // legacy plain-text feedback
+                    }
+                    return (
+                      <div className="text-sm bg-accent/40 rounded-lg p-3">
+                        <p className="font-medium mb-1">ملاحظات المصحّح:</p>
+                        {fb ? (
+                          <div className="space-y-1.5">
+                            {fb.strengths?.length ? (
+                              <div>
+                                <p className="text-success font-medium text-xs">نقاط القوة</p>
+                                <ul className="list-disc pr-4 text-muted-foreground space-y-0.5">
+                                  {fb.strengths.map((s, k) => <li key={k}><MixedLatex text={s} /></li>)}
+                                </ul>
+                              </div>
+                            ) : null}
+                            {fb.improvements?.length ? (
+                              <div>
+                                <p className="text-destructive font-medium text-xs">للتحسين</p>
+                                <ul className="list-disc pr-4 text-muted-foreground space-y-0.5">
+                                  {fb.improvements.map((s, k) => <li key={k}><MixedLatex text={s} /></li>)}
+                                </ul>
+                              </div>
+                            ) : null}
+                            {fb.note ? <p className="text-muted-foreground"><MixedLatex text={fb.note} /></p> : null}
+                          </div>
+                        ) : (
+                          <p className="text-muted-foreground">{a.ai_feedback}</p>
+                        )}
+                        {a.score !== null && <p className="text-xs mt-1 font-bold">الدرجة: {a.score}/10</p>}
+                      </div>
+                    );
+                  })()}
                   {q.source_excerpt && (
                     <details className="text-xs">
                       <summary className="cursor-pointer text-muted-foreground hover:text-foreground">عرض المرجع من المصدر</summary>
