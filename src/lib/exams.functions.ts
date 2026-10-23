@@ -65,6 +65,7 @@ const GenInput = z.object({
   questionShape: z.enum(QUESTION_SHAPES).default("mixed"),
   isRetraining: z.boolean().default(false),
   weakQuestionIds: z.array(z.string().uuid()).optional(),
+  imageUrls: z.array(z.string()).max(8).optional(),
 });
 
 const ManualQuestionAssistInput = z.object({
@@ -82,6 +83,7 @@ const questionSchema = z.object({
   correct_answer: z.string().describe("For MCQ: the exact correct option text. For essay: a model answer."),
   explanation: z.string(),
   source_excerpt: z.string().describe("The exact passage from the source that this question is based on."),
+  image_url: z.string().optional().describe("The reference URL of the image this question is based on, when provided."),
 });
 
 const examSchema = z.object({
@@ -208,6 +210,7 @@ function normalizeExamPayload(payload: unknown) {
     correct_answer: string;
     explanation: string;
     source_excerpt: string;
+    image_url: string;
   };
 
   const rawQuestions = Array.isArray(payload)
@@ -240,6 +243,7 @@ function normalizeExamPayload(payload: unknown) {
         correct_answer: correctAnswer,
         explanation: String((question as any)?.explanation ?? (question as any)?.reasoning ?? (question as any)?.rationale ?? "").trim(),
         source_excerpt: String((question as any)?.source_excerpt ?? (question as any)?.sourceExcerpt ?? (question as any)?.excerpt ?? (question as any)?.reference ?? "").trim(),
+        image_url: String((question as any)?.image_url ?? (question as any)?.imageUrl ?? "").trim(),
       };
     })
     .filter((question: NormalizedQuestion) => {
