@@ -10,9 +10,9 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useServerFn } from "@tanstack/react-start";
 import { analyzeSource, assistManualQuestion, generateExam, ocrImage } from "@/lib/exams.functions";
 import { supabase } from "@/integrations/supabase/client";
-import { extractTextFromFile, fileToBase64 } from "@/lib/file-extract";
+import { extractDocumentAssets } from "@/lib/file-extract";
 import { toast } from "sonner";
-import { Upload, FileText, Loader2, Sparkles, ListChecks, Wand2, CopyPlus, Brain } from "lucide-react";
+import { Upload, FileText, Loader2, Sparkles, ListChecks, Wand2, CopyPlus, Brain, ImageIcon } from "lucide-react";
 import { motion } from "framer-motion";
 import { MixedLatex } from "@/components/math/Latex";
 
@@ -52,6 +52,7 @@ function NewExam() {
   const [rawText, setRawText] = useState("");
   const [sourceTitle, setSourceTitle] = useState("");
   const [extracting, setExtracting] = useState(false);
+  const [extractedImages, setExtractedImages] = useState<string[]>([]);
 
   const [examTitle, setExamTitle] = useState("");
   const [duration, setDuration] = useState(15);
@@ -71,17 +72,27 @@ function NewExam() {
     setFile(f);
     setSourceTitle(f.name.replace(/\.[^.]+$/, ""));
     setExtracting(true);
+    setExtractedImages([]);
     try {
-      const text = await extractTextFromFile(f);
-      if (text === "__IMAGE__") {
-        toast.info("جارٍ استخراج النص من الصورة...");
-        const b64 = await fileToBase64(f);
-        const r = await ocr({ data: { imageBase64: b64, mimeType: f.type } });
-        setRawText(r.text);
-      } else {
-        setRawText(text);
+      // Module: scan/document — text extraction + embedded image extraction + OCR fallback
+      const assets = await extractDocumentAssets(f);
+      let text = assets.text;
+      if (text.trim().length < 200 && assets.images.length > 0) {
+        toast.info("النص المستخرج قليل — جارٍ قراءة الصور بالذكاء الاصطناعي (OCR)...");
+        const ocrParts: string[] = [];
+        for (const img of assets.images.slice(0, 3)) {
+          try {
+            const r = await ocr({ data: { imageBase64: img.dataUrl, mimeType: "image/jpeg" } });
+            if (r.text) ocrParts.push(r.text);
+          } catch {
+            // skip failed OCR pages, keep the rest
+          }
+        }
+        text = [text.trim(), ocrParts.join("\n\n")].filter(Boolean).join("\n\n");
       }
-      toast.success("تم استخراج النص بنجاح");
+      setRawText(text);
+      setExtractedImages(assets.images.map((i) => i.dataUrl));
+      toast.success(assets.images.length > 0 ? `تم استخراج النص و${assets.images.length} صورة من الملف` : "تم استخراج النص بنجاح");
     } catch (e: any) {
       toast.error(e.message || "فشل استخراج النص");
     } finally {
@@ -116,17 +127,40 @@ function NewExam() {
   const start = async () => {
     setGenerating(true);
     try {
-      // Save source (include analysis if available)
+      const { data: u } = await supabase.auth.getUser();
+      const uid = u.user!.id;
+
+      // Upload extracted images so visual questions can reference them
+      const uploadedUrls: string[] = [];
+      for (let i = 0; i < extractedImages.length; i++) {
+        try {
+          const blob = await (await fetch(extractedImages[i])).blob();
+          const path = `${uid}/${Date.now()}-${i}.jpg`;
+          const { error: upErr } = await supabase.storage
+            .from("source-images")
+            .upload(path, blob, { contentType: "image/jpeg" });
+          if (upErr) continue;
+          const { data: signed } = await supabase.storage
+            .from("source-images")
+            .createSignedUrl(path, 60 * 60 * 24 * 7);
+          if (signed?.signedUrl) uploadedUrls.push(signed.signedUrl);
+        } catch {
+          // image upload is optional — proceed with text-only generation
+        }
+      }
+
+      // Save source (include analysis + extracted images if available)
       const { data: src, error: srcErr } = await supabase
         .from("sources")
         .insert({
-          user_id: (await supabase.auth.getUser()).data.user!.id,
+          user_id: uid,
           title: sourceTitle.trim() || "مصدر بدون عنوان",
           file_name: file?.name ?? null,
           content: rawText,
           char_count: rawText.length,
           content_nature: analysis?.nature ?? null,
           focus_areas: analysis?.focus_areas ?? null,
+          image_urls: uploadedUrls,
         })
         .select()
         .single();
@@ -142,6 +176,7 @@ function NewExam() {
           questionType: qType,
           questionShape,
           isRetraining: false,
+          imageUrls: uploadedUrls,
         },
       });
       toast.success(`تم توليد ${res.questionCount} سؤال!`);
@@ -204,6 +239,12 @@ function NewExam() {
                   <div className="mt-4 inline-flex items-center gap-2 text-sm bg-accent text-accent-foreground rounded-full px-3 py-1">
                     <FileText className="w-3.5 h-3.5" />
                     {file.name}
+                  </div>
+                )}
+                {extractedImages.length > 0 && (
+                  <div className="mt-2 inline-flex items-center gap-2 text-sm bg-primary/10 text-primary rounded-full px-3 py-1">
+                    <ImageIcon className="w-3.5 h-3.5" />
+                    {extractedImages.length} صورة مستخرجة من الملف — ستُستخدم في توليد الأسئلة
                   </div>
                 )}
               </label>
