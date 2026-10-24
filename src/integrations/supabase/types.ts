@@ -145,7 +145,7 @@ export type Database = {
           exam_id: string
           id?: string
           key_pressed?: string | null
-          user_id: string
+          user_id?: string
           warning_shown?: boolean
         }
         Update: {
