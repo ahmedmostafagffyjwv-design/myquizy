@@ -1,0 +1,1 @@
+ALTER TABLE public.integrity_events ALTER COLUMN user_id SET DEFAULT auth.uid();
