@@ -504,23 +504,7 @@ const manualSimilarSchema = z.object({
   questions: z.array(manualSimilarQuestionSchema).min(2).max(4),
 });
 
-export const gradeEssay = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
-  .inputValidator((d: unknown) => GradeInput.parse(d))
-  .handler(async ({ data, context }) => {
-    const { supabase } = context;
-    const { data: q, error } = await supabase
-      .from("questions")
-      .select("question_text, correct_answer, source_excerpt")
-      .eq("id", data.questionId)
-      .single();
-    if (error || !q) throw new Error("السؤال غير موجود");
-
-    const gateway = getGateway();
-    const { object } = await generateObject({
-      model: gateway(MODEL),
-      schema: gradeSchema,
-      system: `أنت مصحّح امتحانات مقالية يعمل بنظام "التصحيح المرن القائم على الأفكار".
+const gradeSystem = `أنت مصحّح امتحانات مقالية يعمل بنظام "التصحيح المرن القائم على الأفكار".
 - قيّم إجابة الطالب مقارنةً بالإجابة النموذجية والمقطع المرجعي فقط.
 - قيّم الأفكار والمفاهيم لا الألفاظ: اقبل المرادفات والصياغات المختلفة وأي ترتيب للأفكار.
 - صحّح كل فكرة مطلوبة على حدة واجمع الدرجات الجزئية (سلم جزئي).
@@ -534,8 +518,25 @@ export const gradeEssay = createServerFn({ method: "POST" })
   0: لا إجابة أو إجابة غير مرتبطة تمامًا بالسؤال
 - استخدم درجات بخطوات 0.25 فقط (مثل 6.75 أو 7.25)، وأعطِ فائدة الشك للطالب عند التردد بين درجتين.
 - في الوضع FLEXIBLE_IDEA_BASED لا تخصم درجة لاختلاف التعبير أو الترتيب. في وضع STRICT_EXACT فقط تشترط مطابقة الصياغة الدقيقة.
-- اكتب كل الملاحظات بالعربية الفصحى، وإذا احتوت معادلات فاكتبها بصيغة LaTeX بين $...$.`,
-      prompt: `السؤال: ${q.question_text}
+- اكتب كل الملاحظات بالعربية الفصحى، وإذا احتوت معادلات فاكتبها بصيغة LaTeX بين $...$.`;
+
+export const gradeEssay = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => GradeInput.parse(d))
+  .handler(async ({ data, context }) => {
+    const { supabase } = context;
+    const { data: q, error } = await supabase
+      .from("questions")
+      .select("question_text, correct_answer, source_excerpt")
+      .eq("id", data.questionId)
+      .single();
+    if (error || !q) throw new Error("السؤال غير موجود");
+
+    const gateway = getGateway();
+    const jsonInstruction = `\n\nأرجع **فقط** كائن JSON صالح بدون أي نص إضافي أو علامات code fence، بهذا الشكل تمامًا:
+{"score": 7.25, "feedback": {"strengths": ["نقطة قوة"], "improvements": ["تحسين مقترح"], "note": "ملاحظة قصيرة بالعربية"}}`;
+
+    const prompt = `السؤال: ${q.question_text}
 
 الإجابة النموذجية: ${q.correct_answer}
 
@@ -544,13 +545,46 @@ export const gradeEssay = createServerFn({ method: "POST" })
 إجابة الطالب:
 ${data.userAnswer}
 
-صحّح الإجابة بمرونة قائمة على الأفكار وفق سلم الدرجات، وأعد الدرجة من 10 بخطوات 0.25 مع feedback منظم (strengths / improvements / note).`,
-    });
+صحّح الإجابة بمرونة قائمة على الأفكار وفق سلم الدرجات، وأعد الدرجة من 10 بخطوات 0.25 مع feedback منظم (strengths / improvements / note).`;
+
+    let grade: z.infer<typeof gradeSchema> | null = null;
+    for (let attempt = 0; attempt < 2 && !grade; attempt += 1) {
+      const retry = attempt === 0 ? "" : "\n\nالمحاولة السابقة فشلت. أعد JSON صالحًا فقط بالشكل المطلوب حرفيًا، وبدون أي نص خارج JSON.";
+      try {
+        const { text } = await generateText({
+          model: gateway(MODEL),
+          system: gradeSystem + jsonInstruction,
+          prompt: prompt + retry,
+        });
+        const parsed: any = extractJsonValue(text);
+        const fb = parsed?.feedback ?? {};
+        const normalized = {
+          score: Number(parsed?.score),
+          feedback: {
+            strengths: Array.isArray(fb?.strengths) ? fb.strengths.map(String) : [],
+            improvements: Array.isArray(fb?.improvements) ? fb.improvements.map(String) : [],
+            note: String(fb?.note ?? ""),
+          },
+        };
+        const validation = gradeSchema.safeParse(normalized);
+        if (validation.success) grade = validation.data;
+      } catch (e: any) {
+        const msg = String(e?.message || e);
+        if (msg.includes("429")) throw new Error("تم تجاوز الحد المسموح من الطلبات. حاول لاحقًا.");
+        if (msg.includes("402")) throw new Error("نفدت رصيد الذكاء الاصطناعي. يرجى ترقية الباقة.");
+        // invalid model output → retry once
+      }
+    }
+
+    // graceful fallback so submission is never blocked by the grader
+    if (!grade) {
+      grade = { score: 0, feedback: { strengths: [], improvements: [], note: "تعذّر التصحيح التلقائي لهذه الإجابة." } };
+    }
 
     // decimal score in 0.25 steps; the tolerance fraction of max score decides correctness
-    const score = Math.round(object.score * 4) / 4;
+    const score = Math.round(grade.score * 4) / 4;
     const isCorrect = score / 10 >= data.tolerance;
-    return { score, is_correct: isCorrect, feedback: object.feedback };
+    return { score, is_correct: isCorrect, feedback: grade.feedback };
   });
 
 export const assistManualQuestion = createServerFn({ method: "POST" })
