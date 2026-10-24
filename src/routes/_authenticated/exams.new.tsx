@@ -130,9 +130,9 @@ function NewExam() {
       const { data: u } = await supabase.auth.getUser();
       const uid = u.user!.id;
 
-      // Upload extracted images so visual questions can reference them
+      // Upload extracted images so visual questions can reference them (max 8 sent to the generator)
       const uploadedUrls: string[] = [];
-      for (let i = 0; i < extractedImages.length; i++) {
+      for (let i = 0; i < Math.min(extractedImages.length, 8); i++) {
         try {
           const blob = await (await fetch(extractedImages[i])).blob();
           const path = `${uid}/${Date.now()}-${i}.jpg`;
