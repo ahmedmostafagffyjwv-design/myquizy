@@ -43,17 +43,30 @@ async function trimDataUrl(dataUrl: string, minPx = MIN_IMAGE_PX): Promise<Extra
   }
 }
 
-/** Convert raw pdf.js image objects (1bpp gray / RGB24 / RGBA32) to JPEG data URL. */
+/** Convert raw pdf.js image objects (ImageBitmap / 1bpp gray / RGB24 / RGBA32) to JPEG data URL. */
 function pdfImageToDataUrl(img: any): Promise<ExtractedImage | null> {
   return new Promise((resolve) => {
     try {
-      const { width, height, data, kind } = img || {};
-      if (!width || !height || !data) return resolve(null);
+      const width = img?.width;
+      const height = img?.height;
+      if (!width || !height) return resolve(null);
+      const scale = Math.min(1, MAX_SIDE / Math.max(width, height));
       const canvas = document.createElement("canvas");
-      canvas.width = width;
-      canvas.height = height;
+      canvas.width = Math.round(width * scale);
+      canvas.height = Math.round(height * scale);
       const ctx = canvas.getContext("2d");
       if (!ctx) return resolve(null);
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      if (img.bitmap) {
+        // pdf.js v4+ hands over decoded JPEG images as ImageBitmap
+        ctx.drawImage(img.bitmap, 0, 0, canvas.width, canvas.height);
+        return resolve({ dataUrl: canvas.toDataURL("image/jpeg", 0.85), width: canvas.width, height: canvas.height });
+      }
+
+      const { data, kind } = img;
+      if (!data) return resolve(null);
       const rgba = new Uint8ClampedArray(width * height * 4);
       if (kind === 1) {
         // RGB_24BPP
@@ -80,20 +93,7 @@ function pdfImageToDataUrl(img: any): Promise<ExtractedImage | null> {
         return resolve(null);
       }
       ctx.putImageData(new ImageData(rgba, width, height), 0, 0);
-      const scale = Math.min(1, MAX_SIDE / Math.max(width, height));
-      let out = canvas;
-      if (scale < 1) {
-        const scaled = document.createElement("canvas");
-        scaled.width = Math.round(width * scale);
-        scaled.height = Math.round(height * scale);
-        const sctx = scaled.getContext("2d");
-        if (!sctx) return resolve(null);
-        sctx.fillStyle = "#ffffff";
-        sctx.fillRect(0, 0, scaled.width, scaled.height);
-        sctx.drawImage(canvas, 0, 0, scaled.width, scaled.height);
-        out = scaled;
-      }
-      resolve({ dataUrl: out.toDataURL("image/jpeg", 0.85), width: out.width, height: out.height });
+      resolve({ dataUrl: canvas.toDataURL("image/jpeg", 0.85), width: canvas.width, height: canvas.height });
     } catch {
       resolve(null);
     }
