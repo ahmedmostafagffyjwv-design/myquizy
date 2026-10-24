@@ -134,6 +134,24 @@ async function extractDocxAssets(buf: ArrayBuffer, minPx: number): Promise<Docum
 // ---------- PDF ----------
 
 async function extractPdfAssets(buf: ArrayBuffer, minPx: number): Promise<DocumentAssets> {
+  // pdf.js v6 relies on the new Map upsert methods; polyfill for older browsers
+  const mapProto = Map.prototype as unknown as Record<string, unknown>;
+  if (!mapProto.getOrInsertComputed) {
+    mapProto.getOrInsertComputed = function (this: Map<unknown, unknown>, key: unknown, cb: () => unknown) {
+      if (this.has(key)) return this.get(key);
+      const v = cb();
+      this.set(key, v);
+      return v;
+    };
+  }
+  if (!mapProto.getOrInsert) {
+    mapProto.getOrInsert = function (this: Map<unknown, unknown>, key: unknown, value: unknown) {
+      if (this.has(key)) return this.get(key);
+      this.set(key, value);
+      return value;
+    };
+  }
+
   const pdfjs: any = await import("pdfjs-dist");
   pdfjs.GlobalWorkerOptions.workerSrc = `https://cdn.jsdelivr.net/npm/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
   const doc = await pdfjs.getDocument({ data: buf }).promise;
