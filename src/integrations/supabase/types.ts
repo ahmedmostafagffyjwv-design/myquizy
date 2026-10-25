@@ -186,6 +186,9 @@ export type Database = {
       }
       questions: {
         Row: {
+          cognitive_level: string | null
+          complexity_level: string | null
+          context_depth: string | null
           correct_answer: string
           created_at: string
           difficulty: string
@@ -195,12 +198,17 @@ export type Database = {
           image_url: string | null
           options: Json | null
           position: number
+          question_kind: string | null
           question_text: string
+          requires_integration: boolean | null
           source_excerpt: string | null
           type: string
           user_id: string
         }
         Insert: {
+          cognitive_level?: string | null
+          complexity_level?: string | null
+          context_depth?: string | null
           correct_answer: string
           created_at?: string
           difficulty: string
@@ -210,12 +218,17 @@ export type Database = {
           image_url?: string | null
           options?: Json | null
           position: number
+          question_kind?: string | null
           question_text: string
+          requires_integration?: boolean | null
           source_excerpt?: string | null
           type: string
           user_id: string
         }
         Update: {
+          cognitive_level?: string | null
+          complexity_level?: string | null
+          context_depth?: string | null
           correct_answer?: string
           created_at?: string
           difficulty?: string
@@ -225,7 +238,9 @@ export type Database = {
           image_url?: string | null
           options?: Json | null
           position?: number
+          question_kind?: string | null
           question_text?: string
+          requires_integration?: boolean | null
           source_excerpt?: string | null
           type?: string
           user_id?: string
