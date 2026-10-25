@@ -3,6 +3,7 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { generateText, generateObject } from "ai";
 import { z } from "zod";
 import { createLovableAiGatewayProvider } from "./ai-gateway.server";
+import { distributionCounts } from "./question-distribution";
 
 const MODEL = "google/gemini-2.5-flash";
 
@@ -66,6 +67,7 @@ const GenInput = z.object({
   isRetraining: z.boolean().default(false),
   weakQuestionIds: z.array(z.string().uuid()).optional(),
   imageUrls: z.array(z.string()).max(8).optional(),
+  cognitiveProfile: z.enum(["analytical", "balanced"]).default("analytical"),
 });
 
 const ManualQuestionAssistInput = z.object({
@@ -84,6 +86,11 @@ const questionSchema = z.object({
   explanation: z.string(),
   source_excerpt: z.string().describe("The exact passage from the source that this question is based on."),
   image_url: z.string().optional().describe("The reference URL of the image this question is based on, when provided."),
+  question_kind: z.enum(["analytical", "comprehension", "direct"]).optional().describe("Cognitive kind of the question"),
+  cognitive_level: z.enum(["remember", "understand", "apply", "analyze", "evaluate", "create"]).optional(),
+  complexity_level: z.enum(["basic", "intermediate", "advanced"]).optional(),
+  context_depth: z.enum(["shallow", "medium", "deep"]).optional(),
+  requires_integration: z.boolean().optional().describe("True when the question merges several concepts"),
 });
 
 const examSchema = z.object({
@@ -112,6 +119,54 @@ const difficultyMap: Record<string, "easy" | "medium" | "hard"> = {
   hard: "hard",
   "صعب": "hard",
   "صعبة": "hard",
+};
+
+const kindMap: Record<string, "analytical" | "comprehension" | "direct"> = {
+  analytical: "analytical",
+  comprehension: "comprehension",
+  direct: "direct",
+  "تحليلية": "analytical",
+  "تحليلي": "analytical",
+  "فهم": "comprehension",
+  "استيعاب": "comprehension",
+  "فهم عميق": "comprehension",
+  "معلومة": "direct",
+  "معلومات": "direct",
+  "مباشرة": "direct",
+};
+
+const cognitiveMap: Record<string, string> = {
+  remember: "remember",
+  understand: "understand",
+  apply: "apply",
+  analyze: "analyze",
+  evaluate: "evaluate",
+  create: "create",
+  "تذكر": "remember",
+  "فهم": "understand",
+  "تطبيق": "apply",
+  "تحليل": "analyze",
+  "تقييم": "evaluate",
+  "ابتكار": "create",
+  "إبداع": "create",
+};
+
+const complexityMap: Record<string, string> = {
+  basic: "basic",
+  intermediate: "intermediate",
+  advanced: "advanced",
+  "أساسي": "basic",
+  "متوسط": "intermediate",
+  "متقدم": "advanced",
+};
+
+const depthMap: Record<string, string> = {
+  shallow: "shallow",
+  medium: "medium",
+  deep: "deep",
+  "سطحي": "shallow",
+  "متوسط": "medium",
+  "عميق": "deep",
 };
 
 function arrayBufferToBase64(buf: ArrayBuffer) {
@@ -221,6 +276,11 @@ function normalizeExamPayload(payload: unknown) {
     explanation: string;
     source_excerpt: string;
     image_url: string;
+    question_kind?: "analytical" | "comprehension" | "direct";
+    cognitive_level?: string;
+    complexity_level?: string;
+    context_depth?: string;
+    requires_integration?: boolean;
   };
 
   const rawQuestions = Array.isArray(payload)
@@ -240,6 +300,11 @@ function normalizeExamPayload(payload: unknown) {
       const difficultyKey = String((question as any)?.difficulty ?? (question as any)?.level ?? "").trim().toLowerCase();
       const type = typeMap[typeKey];
       const difficulty = difficultyMap[difficultyKey];
+      const kindKey = String((question as any)?.question_kind ?? (question as any)?.kind ?? "").trim().toLowerCase();
+      const cognitiveKey = String((question as any)?.cognitive_level ?? (question as any)?.cognitiveLevel ?? "").trim().toLowerCase();
+      const complexityKey = String((question as any)?.complexity_level ?? (question as any)?.complexity ?? "").trim().toLowerCase();
+      const depthKey = String((question as any)?.context_depth ?? (question as any)?.contextDepth ?? "").trim().toLowerCase();
+      const requiresIntegrationRaw = (question as any)?.requires_integration ?? (question as any)?.requiresIntegration;
       const correctAnswer = normalizeCorrectAnswer(
         (question as any)?.correct_answer ?? (question as any)?.correctAnswer ?? (question as any)?.answer,
         options,
@@ -254,6 +319,11 @@ function normalizeExamPayload(payload: unknown) {
         explanation: String((question as any)?.explanation ?? (question as any)?.reasoning ?? (question as any)?.rationale ?? "").trim(),
         source_excerpt: String((question as any)?.source_excerpt ?? (question as any)?.sourceExcerpt ?? (question as any)?.excerpt ?? (question as any)?.reference ?? "").trim(),
         image_url: String((question as any)?.image_url ?? (question as any)?.imageUrl ?? "").trim(),
+        question_kind: kindMap[kindKey],
+        cognitive_level: cognitiveMap[cognitiveKey],
+        complexity_level: complexityMap[complexityKey],
+        context_depth: depthMap[depthKey],
+        requires_integration: typeof requiresIntegrationRaw === "boolean" ? requiresIntegrationRaw : undefined,
       };
     })
     .filter((question: NormalizedQuestion) => {
@@ -319,6 +389,14 @@ export const generateExam = createServerFn({ method: "POST" })
 
     const shapeAr = shapeGuidance[data.questionShape] ?? shapeGuidance.mixed;
 
+    const distribution = distributionCounts(data.questionCount);
+    const distributionAr = data.cognitiveProfile === "analytical"
+      ? `التوزيع المعرفي الإلزامي: ${distribution.analytical} سؤال تحليلي (analytical)، ${distribution.comprehension} سؤال فهم عميق (comprehension)، ${distribution.direct} سؤال معلومات مباشرة (direct).
+- الأسئلة التحليلية: تحليل سيناريوهات معقدة، حل مشاكل متعددة الأبعاد، استخلاص نتائج من نصوص طويلة، ربط مفاهيم متداخلة، تقييم نقاط قوة وضعف، توقع عواقب وتطبيقات عملية.
+- الأسئلة الممنوعة بنسبة عالية: اختيار من متعدد مباشر سطحي، أسئلة حفظ معلومات، تعريفات بسيطة.
+- سجّل لكل سؤال question_kind وcognitive_level وcomplexity_level وcontext_depth وrequires_integration (اجعلها true عندما يدمج السؤال عدة مفاهيم).`
+      : "وزّع الأسئلة بين تحليلية وفهم ومعلومات مباشرة بنسب متوازنة، وسجّل التصنيف المعرفي لكل سؤال (question_kind وcognitive_level وcomplexity_level وcontext_depth وrequires_integration).";
+
     const focusInfo = src.content_nature
       ? `\n- طبيعة المقرر المكتشفة تلقائياً: ${src.content_nature}${
           Array.isArray(src.focus_areas) && src.focus_areas.length
@@ -339,9 +417,10 @@ export const generateExam = createServerFn({ method: "POST" })
 9. ممنوع تكرار نفس الفكرة أو نفس الصياغة في أكثر من سؤال.
 10. شكل الأسئلة المطلوب: ${shapeAr}`;
 
-    const userPrompt = `ولّد امتحانًا بـ${data.questionCount} سؤال.
+const userPrompt = `ولّد امتحانًا بـ${data.questionCount} سؤال.
 - نوع الأسئلة: ${typeAr}
-- مستوى الصعوبة: ${difficultyAr}${focusInfo}
+- مستوى الصعوبة: ${difficultyAr}
+- التوزيع المعرفي: ${distributionAr}${focusInfo}
 
 النص المصدر:
 """
@@ -367,6 +446,11 @@ ${imageUrlsListing}
       "question_text": "...",
       "options": ["...", "...", "...", "..."],
       "correct_answer": "...",
+      "question_kind": "analytical" | "comprehension" | "direct",
+      "cognitive_level": "remember" | "understand" | "apply" | "analyze" | "evaluate" | "create",
+      "complexity_level": "basic" | "intermediate" | "advanced",
+      "context_depth": "shallow" | "medium" | "deep",
+      "requires_integration": true,
       "explanation": "...",
       "source_excerpt": "...",
       "image_url": "رابط الصورة المرجعي فقط إذا كان السؤال مبنيًا على صورة، وإلا فاحذف الحقل"
@@ -458,6 +542,11 @@ ${imageUrlsListing}
       explanation: q.explanation,
       source_excerpt: q.source_excerpt,
       image_url: q.image_url ?? null,
+      question_kind: q.question_kind ?? null,
+      cognitive_level: q.cognitive_level ?? null,
+      complexity_level: q.complexity_level ?? null,
+      context_depth: q.context_depth ?? null,
+      requires_integration: q.requires_integration ?? null,
     }));
     const { error: qErr } = await supabase.from("questions").insert(rows);
     if (qErr) throw new Error("فشل حفظ الأسئلة: " + qErr.message);

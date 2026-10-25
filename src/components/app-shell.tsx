@@ -1,4 +1,4 @@
-import { Link, useRouter } from "@tanstack/react-router";
+import { Link, useRouter, useRouterState } from "@tanstack/react-router";
 import { useTheme } from "@/hooks/use-theme";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -20,6 +20,14 @@ export function AppShell({ children }: { children: ReactNode }) {
   const { theme, toggle } = useTheme();
   const router = useRouter();
   const qc = useQueryClient();
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+
+  // Full Focus Mode: during an active exam hide sidebar, nav header, bottom nav and notifications
+  const focusMode = /^\/exams\/[^/]+$/.test(pathname);
+
+  if (focusMode) {
+    return <div className="min-h-screen bg-background">{children}</div>;
+  }
 
   const signOut = async () => {
     await qc.cancelQueries();

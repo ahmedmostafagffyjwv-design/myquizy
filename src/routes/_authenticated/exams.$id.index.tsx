@@ -31,6 +31,9 @@ type Q = {
   explanation: string | null;
   source_excerpt: string | null;
   image_url: string | null;
+  question_kind: string | null;
+  cognitive_level: string | null;
+  complexity_level: string | null;
 };
 
 function TakeExam() {
@@ -208,6 +211,7 @@ function TakeExam() {
               <div className="flex items-start justify-between gap-2">
                 <span className="text-xs px-2 py-1 rounded-full bg-muted text-muted-foreground">
                   {current.type === "mcq" ? "اختيار من متعدد" : "سؤال مقالي"} · {difLabel(current.difficulty)}
+                  {kindLabel(current.question_kind) ? ` · ${kindLabel(current.question_kind)}` : ""}
                 </span>
                 {current.source_excerpt && (
                   <Button variant="ghost" size="sm" onClick={() => setShowSource((v) => !v)}>
@@ -299,4 +303,8 @@ function TakeExam() {
 
 function difLabel(d: string) {
   return d === "easy" ? "سهل" : d === "medium" ? "متوسط" : d === "hard" ? "صعب" : d;
+}
+
+function kindLabel(k: string | null) {
+  return k === "analytical" ? "تحليلي" : k === "comprehension" ? "فهم عميق" : k === "direct" ? "معلومة" : "";
 }
