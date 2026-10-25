@@ -3,6 +3,7 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { generateText, generateObject } from "ai";
 import { z } from "zod";
 import { createLovableAiGatewayProvider } from "./ai-gateway.server";
+import { distributionCounts } from "./question-distribution";
 
 const MODEL = "google/gemini-2.5-flash";
 
@@ -167,13 +168,6 @@ const depthMap: Record<string, string> = {
   "متوسط": "medium",
   "عميق": "deep",
 };
-
-function distributionCounts(n: number) {
-  const direct = Math.round(n * 0.05);
-  const comprehension = Math.round(n * 0.15);
-  const analytical = Math.max(0, n - direct - comprehension);
-  return { analytical, comprehension, direct };
-}
 
 function arrayBufferToBase64(buf: ArrayBuffer) {
   const bytes = new Uint8Array(buf);
