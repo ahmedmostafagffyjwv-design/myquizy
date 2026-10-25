@@ -60,6 +60,7 @@ function NewExam() {
   const [difficulty, setDifficulty] = useState<"easy" | "medium" | "hard" | "mixed">("mixed");
   const [qType, setQType] = useState<"mcq" | "essay" | "mixed">("mcq");
   const [questionShape, setQuestionShape] = useState<"memorization" | "understanding" | "problems" | "visual" | "comparison" | "mixed">("mixed");
+  const [cognitiveProfile, setCognitiveProfile] = useState<"analytical" | "balanced">("analytical");
   const [generating, setGenerating] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
   const [analysis, setAnalysis] = useState<{ nature: string; focus_areas: string[]; suggested_shape: string; summary_ar: string } | null>(null);
@@ -175,6 +176,7 @@ function NewExam() {
           difficulty,
           questionType: qType,
           questionShape,
+          cognitiveProfile,
           isRetraining: false,
           imageUrls: uploadedUrls,
         },
@@ -452,6 +454,21 @@ function NewExam() {
               </RadioGroup>
             </div>
 
+            <div>
+              <Label className="mb-3 block">النمط المعرفي للأسئلة</Label>
+              <RadioGroup value={cognitiveProfile} onValueChange={(v: any) => setCognitiveProfile(v)} className="grid grid-cols-2 gap-2">
+                <label className={`border rounded-lg p-3 cursor-pointer text-center text-sm transition-colors ${cognitiveProfile === "analytical" ? "border-primary bg-primary/10 text-primary font-bold" : "hover:bg-accent"}`}>
+                  <RadioGroupItem value="analytical" className="sr-only" />
+                  <span className="block">تحليلي (توصية)</span>
+                  <span className="block text-[10px] text-muted-foreground mt-0.5">80% تحليل · 15% فهم · 5% معلومات</span>
+                </label>
+                <label className={`border rounded-lg p-3 cursor-pointer text-center text-sm transition-colors ${cognitiveProfile === "balanced" ? "border-primary bg-primary/10 text-primary font-bold" : "hover:bg-accent"}`}>
+                  <RadioGroupItem value="balanced" className="sr-only" />
+                  <span className="block">متوازن</span>
+                  <span className="block text-[10px] text-muted-foreground mt-0.5">نسب متقاربة بين الأنواع</span>
+                </label>
+              </RadioGroup>
+            </div>
 
             <div className="flex gap-2">
               <Button variant="outline" onClick={() => setStep(1)} disabled={generating} className="flex-1">السابق</Button>
