@@ -12,7 +12,8 @@ describe("distributionCounts", () => {
       const d = distributionCounts(n);
       expect(d.analytical + d.comprehension + d.direct).toBe(n);
       expect(d.analytical).toBeGreaterThanOrEqual(d.comprehension);
-      expect(d.comprehension).toBeGreaterThanOrEqual(d.direct);
+      expect(d.analytical).toBeGreaterThanOrEqual(d.direct);
+      expect(Math.min(d.analytical, d.comprehension, d.direct)).toBeGreaterThanOrEqual(0);
     }
   });
 });

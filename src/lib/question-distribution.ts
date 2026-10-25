@@ -7,8 +7,8 @@ export type QuestionDistribution = {
 };
 
 export function distributionCounts(total: number): QuestionDistribution {
-  const direct = Math.round(total * 0.05);
+  const analytical = Math.round(total * 0.8);
   const comprehension = Math.round(total * 0.15);
-  const analytical = Math.max(0, total - direct - comprehension);
+  const direct = Math.max(0, total - analytical - comprehension);
   return { analytical, comprehension, direct };
 }
