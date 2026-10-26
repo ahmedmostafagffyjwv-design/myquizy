@@ -1,0 +1,151 @@
+{
+  "version": 1,
+  "sdk_version": "3.3.0",
+  "path": "/mcp",
+  "auth": {
+    "type": "oauth",
+    "issuer": "https://fkkksmrramrwfcudiioq.supabase.co/auth/v1",
+    "accepted_audiences": [
+      "authenticated"
+    ]
+  },
+  "mcp": {
+    "server": {
+      "name": "edugenius-ai",
+      "version": "0.1.0",
+      "title": "EduGenius AI"
+    },
+    "tools": [
+      {
+        "name": "list_exams",
+        "title": "List exams",
+        "description": "List the signed-in user's generated exams (title, status, score, difficulty, dates). Use get_exam to fetch an exam's full questions.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "status": {
+              "type": "string",
+              "enum": [
+                "all",
+                "pending",
+                "completed"
+              ],
+              "default": "all",
+              "description": "Filter by exam status. 'pending' means not yet taken."
+            },
+            "limit": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 50,
+              "default": 20,
+              "description": "Maximum number of exams to return."
+            }
+          },
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "get_exam",
+        "title": "Get exam with questions",
+        "description": "Fetch one exam of the signed-in user together with all its questions (text, options, correct answer, explanation, source excerpt). Use list_exams first to find the exam id.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "exam_id": {
+              "type": "string",
+              "format": "uuid",
+              "description": "The exam id returned by list_exams."
+            }
+          },
+          "required": [
+            "exam_id"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "list_weak_questions",
+        "title": "List mistake bank",
+        "description": "List the signed-in user's mistake bank (weak questions): which questions they got wrong, how often, and whether they are mastered. Includes the question text and explanation.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "mastered": {
+              "type": "string",
+              "enum": [
+                "all",
+                "not_mastered",
+                "mastered"
+              ],
+              "default": "not_mastered",
+              "description": "Filter by mastery. Default shows only not-yet-mastered questions."
+            },
+            "limit": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 50,
+              "default": 20,
+              "description": "Maximum number of entries to return."
+            }
+          },
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "list_sources",
+        "title": "List study sources",
+        "description": "List the signed-in user's uploaded study sources (documents used to generate exams). Returns titles and metadata, not full document text.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {},
+          "additionalProperties": false
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "get_study_stats",
+        "title": "Get study stats",
+        "description": "Summarize the signed-in user's study activity: number of exams, completed exams, average score, mistake-bank size, mastered questions, and number of uploaded sources.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {},
+          "additionalProperties": false
+        },
+        "outputSchema": null
+      }
+    ]
+  }
+}
