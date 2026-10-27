@@ -14,6 +14,7 @@ import { toast } from "sonner";
 import { Clock, ChevronLeft, ChevronRight, Loader2, BookOpen, CheckCircle2 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { MixedLatex } from "@/components/math/Latex";
+import { MathInput } from "@/components/math/MathInput";
 
 export const Route = createFileRoute("/_authenticated/exams/$id/")({
   head: () => ({ meta: [{ title: "خوض الامتحان — اختبرني" }] }),
@@ -259,11 +260,9 @@ function TakeExam() {
               )}
 
               {current.type === "essay" && (
-                <Textarea
+                <MathInput
                   value={answers[current.id] || ""}
-                  onChange={(e) => setAnswers((a) => ({ ...a, [current.id]: e.target.value }))}
-                  rows={6}
-                  placeholder="اكتب إجابتك هنا..."
+                  onChange={(v) => setAnswers((a) => ({ ...a, [current.id]: v }))}
                 />
               )}
 

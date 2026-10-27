@@ -61,7 +61,7 @@ export default defineTool({
     if (args.mastered === "mastered") query = query.eq("mastered", true);
     const { data, error } = await query;
     if (error) return { content: [{ type: "text", text: error.message }], isError: true };
-    const weak = (data ?? []).map(toWeakJson);
+    const weak = ((data ?? []) as any[]).map((w) => toWeakJson({ ...w, questions: Array.isArray(w.questions) ? w.questions[0] ?? null : w.questions }));
     return {
       content: [{ type: "text", text: weak.length === 0 ? "The mistake bank is empty for this filter." : weak.map((w) => `${w.id}: (wrong x${w.times_wrong}) ${w.question_text ?? "question removed"}`).join("\n") }],
       structuredContent: { weak_questions: weak },

@@ -57,11 +57,11 @@ export default defineTool({
       .order("position", { ascending: true });
     if (qError) return { content: [{ type: "text", text: qError.message }], isError: true };
 
-    const examJson = toExamJson(exam);
-    const questionsJson = (questions ?? []).map(toQuestionJson);
+    const examJson = JSON.parse(JSON.stringify(exam)) as any;
+    const questionsJson = JSON.parse(JSON.stringify(questions ?? [])) as any[];
     return {
       content: [{ type: "text", text: `${examJson.title} — ${examJson.status}${examJson.score !== null ? ` — ${examJson.score}%` : ""} — ${questionsJson.length} questions.` }],
-      structuredContent: { exam: examJson, questions: questionsJson },
+      structuredContent: { exam: examJson, questions: questionsJson } as any,
     };
   },
 });
