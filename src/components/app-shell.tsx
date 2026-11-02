@@ -4,12 +4,13 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { useQueryClient } from "@tanstack/react-query";
 import {
-  LayoutDashboard, PlusCircle, History, AlertTriangle, BarChart3, Sun, Moon, LogOut, BookOpenCheck, Info,
+  LayoutDashboard, PlusCircle, History, AlertTriangle, BarChart3, Sun, Moon, LogOut, BookOpenCheck, Info, Library,
 } from "lucide-react";
 import type { ReactNode } from "react";
 
 const navItems = [
   { to: "/dashboard", label: "لوحة التحكم", icon: LayoutDashboard },
+  { to: "/notebooks", label: "دفاتري الدراسية", icon: Library },
   { to: "/exams/new", label: "امتحان جديد", icon: PlusCircle },
   { to: "/exams/history", label: "السجل", icon: History },
   { to: "/weak-bank", label: "بنك الأخطاء", icon: AlertTriangle },

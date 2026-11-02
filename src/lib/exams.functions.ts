@@ -68,6 +68,10 @@ const GenInput = z.object({
   weakQuestionIds: z.array(z.string().uuid()).optional(),
   imageUrls: z.array(z.string()).max(8).optional(),
   cognitiveProfile: z.enum(["analytical", "balanced"]).default("analytical"),
+  extraSourceIds: z.array(z.string().uuid()).max(40).optional(),
+  subjectId: z.string().uuid().optional(),
+  unitId: z.string().uuid().optional(),
+  lessonId: z.string().uuid().optional(),
 });
 
 const ManualQuestionAssistInput = z.object({
@@ -350,7 +354,20 @@ export const generateExam = createServerFn({ method: "POST" })
       .single();
     if (srcErr || !src) throw new Error("لم يتم العثور على المصدر");
 
-    const content = (src.content || "").slice(0, 30000);
+    let content = (src.content || "").slice(0, 30000);
+    const extraIds = (data.extraSourceIds ?? []).filter((id) => id !== data.sourceId);
+    if (extraIds.length) {
+      const { data: extras } = await supabase
+        .from("sources")
+        .select("id, title, content")
+        .in("id", extraIds);
+      const all = [{ title: src.title, content: src.content || "" }, ...(extras ?? [])];
+      const per = Math.max(1500, Math.floor(30000 / all.length));
+      content = all
+        .map((x) => `### المصدر: ${x.title}\n${(x.content || "").slice(0, per)}`)
+        .join("\n\n")
+        .slice(0, 30000);
+    }
 
     // Embedded images (Module: scan/document) — fetched server-side for visual question generation
     const imageUrls = (data.imageUrls ?? []).slice(0, 8);
@@ -524,6 +541,10 @@ ${imageUrlsListing}
         question_shape: data.questionShape,
         status: "ready",
         is_retraining: data.isRetraining,
+        subject_id: data.subjectId ?? null,
+        unit_id: data.unitId ?? null,
+        lesson_id: data.lessonId ?? null,
+        source_ids: [data.sourceId, ...extraIds],
       })
       .select()
       .single();
