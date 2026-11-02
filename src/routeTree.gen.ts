@@ -19,6 +19,8 @@ import { Route as AuthenticatedWeakBankRouteImport } from './routes/_authenticat
 import { Route as AuthenticatedExamsIdRouteImport } from './routes/_authenticated/exams.$id'
 import { Route as AuthenticatedExamsHistoryRouteImport } from './routes/_authenticated/exams.history'
 import { Route as AuthenticatedExamsNewRouteImport } from './routes/_authenticated/exams.new'
+import { Route as AuthenticatedNotebooksIndexRouteImport } from './routes/_authenticated/notebooks.index'
+import { Route as AuthenticatedNotebooksIdRouteImport } from './routes/_authenticated/notebooks.$id'
 import { Route as AuthenticatedExamsIdIndexRouteImport } from './routes/_authenticated/exams.$id.index'
 import { Route as AuthenticatedExamsIdResultsRouteImport } from './routes/_authenticated/exams.$id.results'
 
@@ -72,6 +74,18 @@ const AuthenticatedExamsNewRoute = AuthenticatedExamsNewRouteImport.update({
   path: '/exams/new',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedNotebooksIndexRoute =
+  AuthenticatedNotebooksIndexRouteImport.update({
+    id: '/notebooks/',
+    path: '/notebooks/',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedNotebooksIdRoute =
+  AuthenticatedNotebooksIdRouteImport.update({
+    id: '/notebooks/$id',
+    path: '/notebooks/$id',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedExamsIdIndexRoute =
   AuthenticatedExamsIdIndexRouteImport.update({
     id: '/',
@@ -95,6 +109,8 @@ export interface FileRoutesByFullPath {
   '/exams/$id': typeof AuthenticatedExamsIdRouteWithChildren
   '/exams/history': typeof AuthenticatedExamsHistoryRoute
   '/exams/new': typeof AuthenticatedExamsNewRoute
+  '/notebooks/$id': typeof AuthenticatedNotebooksIdRoute
+  '/notebooks/': typeof AuthenticatedNotebooksIndexRoute
   '/exams/$id/results': typeof AuthenticatedExamsIdResultsRoute
   '/exams/$id/': typeof AuthenticatedExamsIdIndexRoute
 }
@@ -107,6 +123,8 @@ export interface FileRoutesByTo {
   '/weak-bank': typeof AuthenticatedWeakBankRoute
   '/exams/history': typeof AuthenticatedExamsHistoryRoute
   '/exams/new': typeof AuthenticatedExamsNewRoute
+  '/notebooks/$id': typeof AuthenticatedNotebooksIdRoute
+  '/notebooks': typeof AuthenticatedNotebooksIndexRoute
   '/exams/$id/results': typeof AuthenticatedExamsIdResultsRoute
   '/exams/$id': typeof AuthenticatedExamsIdIndexRoute
 }
@@ -122,6 +140,8 @@ export interface FileRoutesById {
   '/_authenticated/exams/$id': typeof AuthenticatedExamsIdRouteWithChildren
   '/_authenticated/exams/history': typeof AuthenticatedExamsHistoryRoute
   '/_authenticated/exams/new': typeof AuthenticatedExamsNewRoute
+  '/_authenticated/notebooks/$id': typeof AuthenticatedNotebooksIdRoute
+  '/_authenticated/notebooks/': typeof AuthenticatedNotebooksIndexRoute
   '/_authenticated/exams/$id/results': typeof AuthenticatedExamsIdResultsRoute
   '/_authenticated/exams/$id/': typeof AuthenticatedExamsIdIndexRoute
 }
@@ -137,6 +157,8 @@ export interface FileRouteTypes {
     | '/exams/$id'
     | '/exams/history'
     | '/exams/new'
+    | '/notebooks/$id'
+    | '/notebooks/'
     | '/exams/$id/results'
     | '/exams/$id/'
   fileRoutesByTo: FileRoutesByTo
@@ -149,6 +171,8 @@ export interface FileRouteTypes {
     | '/weak-bank'
     | '/exams/history'
     | '/exams/new'
+    | '/notebooks/$id'
+    | '/notebooks'
     | '/exams/$id/results'
     | '/exams/$id'
   id:
@@ -163,6 +187,8 @@ export interface FileRouteTypes {
     | '/_authenticated/exams/$id'
     | '/_authenticated/exams/history'
     | '/_authenticated/exams/new'
+    | '/_authenticated/notebooks/$id'
+    | '/_authenticated/notebooks/'
     | '/_authenticated/exams/$id/results'
     | '/_authenticated/exams/$id/'
   fileRoutesById: FileRoutesById
@@ -246,6 +272,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedExamsNewRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/notebooks/': {
+      id: '/_authenticated/notebooks/'
+      path: '/notebooks'
+      fullPath: '/notebooks/'
+      preLoaderRoute: typeof AuthenticatedNotebooksIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/notebooks/$id': {
+      id: '/_authenticated/notebooks/$id'
+      path: '/notebooks/$id'
+      fullPath: '/notebooks/$id'
+      preLoaderRoute: typeof AuthenticatedNotebooksIdRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/exams/$id/': {
       id: '/_authenticated/exams/$id/'
       path: '/'
@@ -283,6 +323,8 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedExamsIdRoute: typeof AuthenticatedExamsIdRouteWithChildren
   AuthenticatedExamsHistoryRoute: typeof AuthenticatedExamsHistoryRoute
   AuthenticatedExamsNewRoute: typeof AuthenticatedExamsNewRoute
+  AuthenticatedNotebooksIdRoute: typeof AuthenticatedNotebooksIdRoute
+  AuthenticatedNotebooksIndexRoute: typeof AuthenticatedNotebooksIndexRoute
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
@@ -292,6 +334,8 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedExamsIdRoute: AuthenticatedExamsIdRouteWithChildren,
   AuthenticatedExamsHistoryRoute: AuthenticatedExamsHistoryRoute,
   AuthenticatedExamsNewRoute: AuthenticatedExamsNewRoute,
+  AuthenticatedNotebooksIdRoute: AuthenticatedNotebooksIdRoute,
+  AuthenticatedNotebooksIndexRoute: AuthenticatedNotebooksIndexRoute,
 }
 
 const AuthenticatedRouteRouteWithChildren =

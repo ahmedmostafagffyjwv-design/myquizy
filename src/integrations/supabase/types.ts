@@ -73,14 +73,18 @@ export type Database = {
           duration_minutes: number
           id: string
           is_retraining: boolean
+          lesson_id: string | null
           question_count: number
           question_shape: string
           question_type: string
           score: number | null
           source_id: string | null
+          source_ids: Json | null
           started_at: string | null
           status: string
+          subject_id: string | null
           title: string
+          unit_id: string | null
           user_id: string
         }
         Insert: {
@@ -90,14 +94,18 @@ export type Database = {
           duration_minutes: number
           id?: string
           is_retraining?: boolean
+          lesson_id?: string | null
           question_count: number
           question_shape?: string
           question_type: string
           score?: number | null
           source_id?: string | null
+          source_ids?: Json | null
           started_at?: string | null
           status?: string
+          subject_id?: string | null
           title: string
+          unit_id?: string | null
           user_id: string
         }
         Update: {
@@ -107,22 +115,47 @@ export type Database = {
           duration_minutes?: number
           id?: string
           is_retraining?: boolean
+          lesson_id?: string | null
           question_count?: number
           question_shape?: string
           question_type?: string
           score?: number | null
           source_id?: string | null
+          source_ids?: Json | null
           started_at?: string | null
           status?: string
+          subject_id?: string | null
           title?: string
+          unit_id?: string | null
           user_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "exams_lesson_id_fkey"
+            columns: ["lesson_id"]
+            isOneToOne: false
+            referencedRelation: "subject_lessons"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "exams_source_id_fkey"
             columns: ["source_id"]
             isOneToOne: false
             referencedRelation: "sources"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "exams_subject_id_fkey"
+            columns: ["subject_id"]
+            isOneToOne: false
+            referencedRelation: "subjects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "exams_unit_id_fkey"
+            columns: ["unit_id"]
+            isOneToOne: false
+            referencedRelation: "subject_units"
             referencedColumns: ["id"]
           },
         ]
@@ -265,7 +298,10 @@ export type Database = {
           focus_areas: Json | null
           id: string
           image_urls: Json | null
+          lesson_id: string | null
+          subject_id: string | null
           title: string
+          unit_id: string | null
           user_id: string
         }
         Insert: {
@@ -277,7 +313,10 @@ export type Database = {
           focus_areas?: Json | null
           id?: string
           image_urls?: Json | null
+          lesson_id?: string | null
+          subject_id?: string | null
           title: string
+          unit_id?: string | null
           user_id: string
         }
         Update: {
@@ -289,7 +328,129 @@ export type Database = {
           focus_areas?: Json | null
           id?: string
           image_urls?: Json | null
+          lesson_id?: string | null
+          subject_id?: string | null
           title?: string
+          unit_id?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sources_lesson_id_fkey"
+            columns: ["lesson_id"]
+            isOneToOne: false
+            referencedRelation: "subject_lessons"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sources_subject_id_fkey"
+            columns: ["subject_id"]
+            isOneToOne: false
+            referencedRelation: "subjects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sources_unit_id_fkey"
+            columns: ["unit_id"]
+            isOneToOne: false
+            referencedRelation: "subject_units"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      subject_lessons: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+          position: number
+          unit_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+          position?: number
+          unit_id: string
+          user_id?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+          position?: number
+          unit_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "subject_lessons_unit_id_fkey"
+            columns: ["unit_id"]
+            isOneToOne: false
+            referencedRelation: "subject_units"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      subject_units: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+          position: number
+          subject_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+          position?: number
+          subject_id: string
+          user_id?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+          position?: number
+          subject_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "subject_units_subject_id_fkey"
+            columns: ["subject_id"]
+            isOneToOne: false
+            referencedRelation: "subjects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      subjects: {
+        Row: {
+          color: string
+          created_at: string
+          description: string | null
+          id: string
+          name: string
+          user_id: string
+        }
+        Insert: {
+          color?: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          name: string
+          user_id?: string
+        }
+        Update: {
+          color?: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          name?: string
           user_id?: string
         }
         Relationships: []
