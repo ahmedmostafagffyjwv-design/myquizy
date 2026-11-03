@@ -854,3 +854,45 @@ export const analyzeSource = createServerFn({ method: "POST" })
     return object;
   });
 
+
+// ---------- Past exams: analyze a reference exam's style (Gemini direct) ----------
+const RefInput = z.object({
+  title: z.string().min(1).max(200),
+  rawText: z.string().min(30).max(60000),
+  subjectId: z.string().uuid().optional(),
+});
+
+export const analyzeReferenceExam = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => RefInput.parse(d))
+  .handler(async ({ data, context }) => {
+    const { supabase, userId } = context;
+    const { data: row, error } = await supabase
+      .from("reference_exams")
+      .insert({ user_id: userId, title: data.title, raw_text: data.rawText, subject_id: data.subjectId ?? null, status: "processing" })
+      .select("id")
+      .single();
+    if (error || !row) throw new Error("فشل حفظ الامتحان المرجعي: " + error?.message);
+
+    try {
+      const text = await geminiGenerate({
+        model: ANALYSIS_MODEL,
+        system: "أنت محلل امتحانات. استخرج البصمة الأسلوبية للامتحان المرفق دون نسخ محتواه. أرجع JSON فقط.",
+        text: `حلّل هذا الامتحان السابق وأرجع JSON بالشكل:
+{"language":"ar|en","question_types":["..."],"difficulty_profile":"...","phrasing_style":"...","archetypes":[{"pattern":"وصف قالب السؤال","cognitive_level":"...","structure":"..."}],"notes":"..."}
+
+الامتحان:
+"""
+${data.rawText.slice(0, 30000)}
+"""`,
+        json: true,
+      });
+      const profile = extractJsonValue(text);
+      await supabase.from("reference_exams").update({ style_profile: profile as any, status: "ready", error: null }).eq("id", row.id);
+      return { id: row.id, status: "ready" as const };
+    } catch (e: any) {
+      const msg = e instanceof GeminiQuotaError ? QUOTA_MESSAGE : String(e?.message || "فشل التحليل");
+      await supabase.from("reference_exams").update({ status: "failed", error: msg }).eq("id", row.id);
+      throw new Error(msg);
+    }
+  });
