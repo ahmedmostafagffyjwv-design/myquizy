@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { supabase } from "@/integrations/supabase/client";
-import { generateExam } from "@/lib/exams.functions";
+import { analyzeReferenceExam, generateExam } from "@/lib/exams.functions";
 import { extractDocumentAssets } from "@/lib/file-extract";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -32,17 +32,18 @@ function Notebook() {
   const { data, isLoading } = useQuery({
     queryKey: key,
     queryFn: async () => {
-      const [s, u, l, src, ex] = await Promise.all([
+      const [s, u, l, src, ex, rf] = await Promise.all([
         supabase.from("subjects").select("*").eq("id", id).single(),
         supabase.from("subject_units").select("*").eq("subject_id", id).order("position").order("created_at"),
         supabase.from("subject_lessons").select("*").order("position").order("created_at"),
         supabase.from("sources").select("id, title, char_count, unit_id, lesson_id, created_at").eq("subject_id", id).order("created_at"),
         supabase.from("exams").select("id, title, score, status, unit_id, lesson_id, created_at").eq("subject_id", id).order("created_at", { ascending: false }),
+        supabase.from("reference_exams").select("id, title, status, error").eq("subject_id", id).order("created_at", { ascending: false }),
       ]);
       if (s.error) throw s.error;
       const units = u.data ?? [];
       const unitIds = new Set(units.map((x) => x.id));
-      return { subject: s.data, units, lessons: (l.data ?? []).filter((x) => unitIds.has(x.unit_id)), sources: src.data ?? [], exams: ex.data ?? [] };
+      return { subject: s.data, units, lessons: (l.data ?? []).filter((x) => unitIds.has(x.unit_id)), sources: src.data ?? [], exams: ex.data ?? [], refs: rf.data ?? [] };
     },
   });
   const refresh = () => { qc.invalidateQueries({ queryKey: key }); qc.invalidateQueries({ queryKey: ["subjects"] }); };
@@ -51,9 +52,10 @@ function Notebook() {
   const [rename, setRename] = useState<{ table: "subjects" | "subject_units" | "subject_lessons"; id: string; name: string } | null>(null);
   const [addSrc, setAddSrc] = useState<Scope | null>(null);
   const [examScope, setExamScope] = useState<Scope | null>(null);
+  const [refOpen, setRefOpen] = useState(false);
 
   if (isLoading || !data) return <div className="flex justify-center py-16"><Loader2 className="w-6 h-6 animate-spin" /></div>;
-  const { subject, units, lessons, sources, exams } = data;
+  const { subject, units, lessons, sources, exams, refs } = data;
 
   const sourcesFor = (sc: Scope) =>
     sc.level === "subject" ? sources : sc.level === "unit" ? sources.filter((s) => s.unit_id === sc.id) : sources.filter((s) => s.lesson_id === sc.id);
@@ -186,9 +188,30 @@ function Notebook() {
         </Card>
       )}
 
+      <Card className="p-4 space-y-2">
+        <div className="flex items-center justify-between">
+          <h2 className="font-bold">الامتحانات السابقة</h2>
+          <Button size="sm" variant="outline" onClick={() => setRefOpen(true)}><Upload className="w-4 h-4 ms-1" />إضافة امتحان سابق</Button>
+        </div>
+        {refs.length === 0 ? <div className="text-sm text-muted-foreground">ارفع امتحانًا سابقًا ليولّد النظام أسئلة بنفس أسلوبه.</div> : (
+          <ul className="space-y-1 text-sm">
+            {refs.map((r) => (
+              <li key={r.id} className="flex items-center gap-2">
+                <FileText className="w-3.5 h-3.5" /><span className="flex-1 truncate">{r.title}</span>
+                <span className={r.status === "ready" ? "text-primary" : r.status === "failed" ? "text-destructive" : "text-muted-foreground"}>
+                  {r.status === "ready" ? "جاهز" : r.status === "failed" ? (r.error || "فشل") : "جارٍ التحليل"}
+                </span>
+                <button onClick={async () => { await supabase.from("reference_exams").delete().eq("id", r.id); refresh(); }} aria-label="حذف"><Trash2 className="w-3.5 h-3.5 hover:text-destructive" /></button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
+
+      <RefExamDialog open={refOpen} subjectId={id} onClose={() => setRefOpen(false)} onDone={refresh} />
       <RenameDialog value={rename} onClose={() => setRename(null)} onDone={refresh} />
       <AddSourceDialog scope={addSrc} subjectId={id} onClose={() => setAddSrc(null)} onDone={refresh} />
-      <ExamDialog scope={examScope} onClose={() => setExamScope(null)}
+      <ExamDialog scope={examScope} refs={refs.filter((r) => r.status === "ready")} onClose={() => setExamScope(null)}
         onStart={async (opts) => {
           const sc = examScope!;
           const ids = sourcesFor(sc).map((s) => s.id);
@@ -202,6 +225,7 @@ function Notebook() {
               subjectId: id,
               unitId: sc.level === "unit" ? sc.id : sc.unitId,
               lessonId: sc.level === "lesson" ? sc.id : undefined,
+              referenceExamId: opts.refId,
             },
           });
           toast.success(`تم توليد ${res.questionCount} سؤال`);
@@ -272,11 +296,44 @@ function AddSourceDialog({ scope, subjectId, onClose, onDone }: { scope: Scope |
   );
 }
 
-function ExamDialog({ scope, onClose, onStart }: { scope: Scope | null; onClose: () => void; onStart: (o: { title: string; count: number; duration: number; qType: "mcq" | "essay" | "mixed" }) => Promise<void> }) {
+function RefExamDialog({ open, subjectId, onClose, onDone }: { open: boolean; subjectId: string; onClose: () => void; onDone: () => void }) {
+  const analyze = useServerFn(analyzeReferenceExam);
+  const [title, setTitle] = useState("");
+  const [text, setText] = useState("");
+  const [busy, setBusy] = useState(false);
+  return (
+    <Dialog open={open} onOpenChange={(o) => !o && !busy && onClose()}>
+      <DialogContent>
+        <DialogHeader><DialogTitle>إضافة امتحان سابق</DialogTitle></DialogHeader>
+        <div className="rounded-md border border-destructive/40 bg-destructive/10 p-2 text-xs text-destructive">
+          الطبقة المجانية قد تستخدم المحتوى لتحسين منتجات Google، لا ترفع ملفات حساسة.
+        </div>
+        <Input placeholder="اسم الامتحان (مثلاً: امتحان 2024)" value={title} onChange={(e) => setTitle(e.target.value)} />
+        <Input type="file" accept=".pdf,.docx,.txt,image/*" onChange={async (e) => {
+          const f = e.target.files?.[0]; if (!f) return;
+          try { const r = await extractDocumentAssets(f); setText(r.text); if (!title) setTitle(f.name.replace(/\.[^.]+$/, "")); }
+          catch { toast.error("تعذّر قراءة الملف"); }
+        }} />
+        <Textarea rows={5} placeholder="أو الصق نص الامتحان هنا" value={text} onChange={(e) => setText(e.target.value)} />
+        <DialogFooter>
+          <Button disabled={busy || text.trim().length < 30 || !title.trim()} onClick={async () => {
+            setBusy(true);
+            try { await analyze({ data: { title, rawText: text.slice(0, 60000), subjectId } }); toast.success("تم تحليل أسلوب الامتحان"); setTitle(""); setText(""); onDone(); onClose(); }
+            catch (e: any) { toast.error(e.message || "فشل التحليل"); onDone(); }
+            setBusy(false);
+          }}>{busy && <Loader2 className="w-4 h-4 animate-spin ms-1" />}{busy ? "جارٍ التحليل..." : "حلّل واحفظ"}</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function ExamDialog({ scope, refs, onClose, onStart }: { scope: Scope | null; refs: { id: string; title: string }[]; onClose: () => void; onStart: (o: { title: string; count: number; duration: number; qType: "mcq" | "essay" | "mixed"; refId?: string }) => Promise<void> }) {
   const [title, setTitle] = useState("");
   const [count, setCount] = useState(10);
   const [duration, setDuration] = useState(20);
   const [qType, setQType] = useState<"mcq" | "essay" | "mixed">("mixed");
+  const [refId, setRefId] = useState("");
   const [busy, setBusy] = useState(false);
   const label = scope?.level === "subject" ? "امتحان شامل للمادة" : scope?.level === "unit" ? "امتحان الوحدة كاملة (مع دروسها)" : "امتحان الدرس";
   return (
@@ -295,10 +352,18 @@ function ExamDialog({ scope, onClose, onStart }: { scope: Scope | null; onClose:
             </Button>
           ))}
         </div>
+        {refs.length > 0 && (
+          <div><Label>محاكاة امتحان سابق (اختياري)</Label>
+            <select className="w-full border rounded-md p-2 bg-background text-sm" value={refId} onChange={(e) => setRefId(e.target.value)}>
+              <option value="">بدون — توليد حر</option>
+              {refs.map((r) => <option key={r.id} value={r.id}>{r.title}</option>)}
+            </select>
+          </div>
+        )}
         <DialogFooter>
           <Button disabled={busy} onClick={async () => {
             setBusy(true);
-            try { await onStart({ title, count, duration, qType }); onClose(); }
+            try { await onStart({ title, count, duration, qType, refId: refId || undefined }); onClose(); }
             catch (e: any) { toast.error(e.message || "فشل التوليد"); }
             setBusy(false);
           }}>{busy && <Loader2 className="w-4 h-4 animate-spin ms-1" />}{busy ? "جارٍ التوليد..." : "ابدأ"}</Button>

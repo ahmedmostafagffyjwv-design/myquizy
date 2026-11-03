@@ -4,6 +4,8 @@ import { generateText, generateObject } from "ai";
 import { z } from "zod";
 import { createLovableAiGatewayProvider } from "./ai-gateway.server";
 import { distributionCounts } from "./question-distribution";
+import { geminiGenerate, GeminiQuotaError, QUOTA_MESSAGE } from "./gemini.server";
+import { ANALYSIS_MODEL, GENERATION_MODEL, VERIFY_MODEL } from "./ai-models";
 
 const MODEL = "google/gemini-2.5-flash";
 
@@ -72,6 +74,7 @@ const GenInput = z.object({
   subjectId: z.string().uuid().optional(),
   unitId: z.string().uuid().optional(),
   lessonId: z.string().uuid().optional(),
+  referenceExamId: z.string().uuid().optional(),
 });
 
 const ManualQuestionAssistInput = z.object({
@@ -453,7 +456,17 @@ ${imageUrlsListing}
 - لا تختلق محتوى غير موجود في الصور أو النص.`
       : "";
 
-    const gateway = getGateway();
+    let referenceInstruction = "";
+    if (data.referenceExamId) {
+      const { data: ref } = await supabase
+        .from("reference_exams")
+        .select("style_profile, status")
+        .eq("id", data.referenceExamId)
+        .single();
+      if (ref?.status === "ready" && ref.style_profile) {
+        referenceInstruction = `\n\nحاكِ أسلوب الامتحان المرجعي التالي (البصمة الأسلوبية) في الصياغة والتعقيد وأنماط الأسئلة، دون نسخ أي سؤال أو رقم أو اسم أو سياق منه. المحتوى العلمي يأتي من النص المصدر فقط:\n${JSON.stringify(ref.style_profile).slice(0, 6000)}`;
+      }
+    }
     const jsonInstruction = `\n\nأرجع **فقط** كائن JSON صالح بالشكل التالي بدون أي نص إضافي أو علامات code fence:
 {
   "questions": [
@@ -485,18 +498,12 @@ ${imageUrlsListing}
         : `\n\nالمحاولة السابقة فشلت. أصلح الإخراج فقط. تذكير صارم: أعد JSON صالحًا فقط، واجعل type و difficulty بالإنجليزية فقط، ولا تضع أي نص خارج JSON.`;
 
       try {
-        const { text } = await generateText({
-          model: gateway(MODEL),
+        const text = await geminiGenerate({
+          model: GENERATION_MODEL,
           system: systemPrompt + jsonInstruction,
-          messages: [
-            {
-              role: "user",
-              content: [
-                { type: "text", text: userPrompt + imageInstruction + retryInstruction },
-                ...imageDataUrls.map((im) => ({ type: "image" as const, image: im.dataUrl })),
-              ] as any,
-            },
-          ] as any,
+          text: userPrompt + referenceInstruction + imageInstruction + retryInstruction,
+          images: imageDataUrls.map((im) => im.dataUrl),
+          json: true,
         });
 
         const parsed = extractJsonValue(text);
@@ -514,9 +521,8 @@ ${imageUrlsListing}
 
         lastFailure = "استجابة النموذج غير متوافقة مع الصيغة المطلوبة.";
       } catch (e: any) {
+        if (e instanceof GeminiQuotaError) throw new Error(QUOTA_MESSAGE);
         const msg = String(e?.message || e);
-        if (msg.includes("429")) throw new Error("تم تجاوز الحد المسموح من الطلبات. حاول لاحقًا.");
-        if (msg.includes("402")) throw new Error("نفدت رصيد الذكاء الاصطناعي. يرجى ترقية الباقة.");
         if (msg === "NO_JSON_FOUND") {
           lastFailure = "تعذر استخراج JSON صالح من استجابة النموذج.";
           continue;
@@ -525,7 +531,33 @@ ${imageUrlsListing}
       }
     }
 
-    if (!questions.length) throw new Error("لم يتمكن النموذج من توليد أي سؤال من هذا المصدر");
+    if (!questions.length) throw new Error(lastFailure || "لم يتمكن النموذج من توليد أي سؤال من هذا المصدر");
+
+    // Verify step: ONE call for the whole exam (free-tier friendly)
+    try {
+      const payload = questions.map((q, i) => ({ i, question: q.question_text, options: q.options ?? [], answer: q.correct_answer, excerpt: q.source_excerpt }));
+      const vText = await geminiGenerate({
+        model: VERIFY_MODEL,
+        system: "أنت مدقق امتحانات. تحقق أن الإجابة الصحيحة لكل سؤال مدعومة بالمقطع المرجعي، وأنها (لأسئلة الاختيار) تطابق أحد الخيارات حرفيًا. أرجع JSON فقط.",
+        text: `الأسئلة:\n${JSON.stringify(payload)}\n\nأرجع: {"results":[{"i":0,"valid":true,"corrected_answer":"نص الخيار الصحيح إن كان يحتاج تصحيحًا وإلا احذفه"}]}`,
+        json: true,
+      });
+      const v: any = extractJsonValue(vText);
+      const results: any[] = Array.isArray(v?.results) ? v.results : [];
+      const drop = new Set<number>();
+      for (const r of results) {
+        const q = questions[r?.i];
+        if (!q) continue;
+        const fix = typeof r.corrected_answer === "string" ? r.corrected_answer.trim() : "";
+        if (fix && (!q.options?.length || q.options.includes(fix))) q.correct_answer = fix;
+        else if (r.valid === false) drop.add(r.i);
+      }
+      const kept = questions.filter((_, i) => !drop.has(i));
+      if (kept.length) questions = kept;
+    } catch (e) {
+      if (e instanceof GeminiQuotaError) throw new Error(QUOTA_MESSAGE);
+      console.error("verify step skipped", e);
+    }
 
     // Create exam
     const { data: exam, error: examErr } = await supabase
@@ -822,3 +854,45 @@ export const analyzeSource = createServerFn({ method: "POST" })
     return object;
   });
 
+
+// ---------- Past exams: analyze a reference exam's style (Gemini direct) ----------
+const RefInput = z.object({
+  title: z.string().min(1).max(200),
+  rawText: z.string().min(30).max(60000),
+  subjectId: z.string().uuid().optional(),
+});
+
+export const analyzeReferenceExam = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => RefInput.parse(d))
+  .handler(async ({ data, context }) => {
+    const { supabase, userId } = context;
+    const { data: row, error } = await supabase
+      .from("reference_exams")
+      .insert({ user_id: userId, title: data.title, raw_text: data.rawText, subject_id: data.subjectId ?? null, status: "processing" })
+      .select("id")
+      .single();
+    if (error || !row) throw new Error("فشل حفظ الامتحان المرجعي: " + error?.message);
+
+    try {
+      const text = await geminiGenerate({
+        model: ANALYSIS_MODEL,
+        system: "أنت محلل امتحانات. استخرج البصمة الأسلوبية للامتحان المرفق دون نسخ محتواه. أرجع JSON فقط.",
+        text: `حلّل هذا الامتحان السابق وأرجع JSON بالشكل:
+{"language":"ar|en","question_types":["..."],"difficulty_profile":"...","phrasing_style":"...","archetypes":[{"pattern":"وصف قالب السؤال","cognitive_level":"...","structure":"..."}],"notes":"..."}
+
+الامتحان:
+"""
+${data.rawText.slice(0, 30000)}
+"""`,
+        json: true,
+      });
+      const profile = extractJsonValue(text);
+      await supabase.from("reference_exams").update({ style_profile: profile as any, status: "ready", error: null }).eq("id", row.id);
+      return { id: row.id, status: "ready" as const };
+    } catch (e: any) {
+      const msg = e instanceof GeminiQuotaError ? QUOTA_MESSAGE : String(e?.message || "فشل التحليل");
+      await supabase.from("reference_exams").update({ status: "failed", error: msg }).eq("id", row.id);
+      throw new Error(msg);
+    }
+  });

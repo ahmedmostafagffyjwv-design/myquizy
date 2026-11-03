@@ -288,6 +288,42 @@ export type Database = {
           },
         ]
       }
+      reference_exams: {
+        Row: {
+          created_at: string
+          error: string | null
+          id: string
+          raw_text: string
+          status: string
+          style_profile: Json | null
+          subject_id: string | null
+          title: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          error?: string | null
+          id?: string
+          raw_text: string
+          status?: string
+          style_profile?: Json | null
+          subject_id?: string | null
+          title: string
+          user_id?: string
+        }
+        Update: {
+          created_at?: string
+          error?: string | null
+          id?: string
+          raw_text?: string
+          status?: string
+          style_profile?: Json | null
+          subject_id?: string | null
+          title?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       sources: {
         Row: {
           char_count: number
