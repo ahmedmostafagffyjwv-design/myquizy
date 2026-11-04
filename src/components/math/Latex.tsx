@@ -5,7 +5,18 @@ export function Latex({ tex, block = false }: { tex: string; block?: boolean }) 
   if (!tex?.trim()) return null;
   const clean = tex.replace(/^\$+|\$+$/g, "").trim();
   try {
-    return block ? <BlockMath math={clean} /> : <InlineMath math={clean} />;
+    if (block) {
+      return (
+        <span dir="ltr" style={{ display: "block", unicodeBidi: "isolate" }}>
+          <BlockMath math={clean} />
+        </span>
+      );
+    }
+    return (
+      <span dir="ltr" style={{ unicodeBidi: "isolate" }}>
+        <InlineMath math={clean} />
+      </span>
+    );
   } catch {
     return <code className="text-destructive">{clean}</code>;
   }
@@ -13,6 +24,7 @@ export function Latex({ tex, block = false }: { tex: string; block?: boolean }) 
 
 /**
  * Renders mixed Arabic text + inline ($...$) and block ($$...$$) LaTeX.
+ * Math segments are forced LTR/isolated so RTL bidi reordering cannot distort them.
  */
 export function MixedLatex({ text }: { text: string }) {
   if (!text) return null;

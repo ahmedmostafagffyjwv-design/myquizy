@@ -18,7 +18,7 @@ export async function geminiGenerate(opts: {
   json?: boolean;
 }): Promise<string> {
   const key = process.env.GEMINI_API_KEY;
-  if (!key) throw new Error("مفتاح Gemini غير مُعدّ");
+  if (!key) throw new Error("متغير البيئة GEMINI_API_KEY غير مُعدّ في أسرار المشروع");
 
   const parts: Part[] = [{ text: opts.text }];
   for (const url of opts.images ?? []) {
@@ -39,8 +39,11 @@ export async function geminiGenerate(opts: {
       headers: { "Content-Type": "application/json", "x-goog-api-key": key },
       body: JSON.stringify(body),
     });
-    if (res.status === 429) {
-      if (attempt >= maxRetries) throw new GeminiQuotaError();
+    if (res.status === 429 || res.status === 503) {
+      if (attempt >= maxRetries) {
+        if (res.status === 429) throw new GeminiQuotaError();
+        throw new Error("خوادم Gemini تحت ضغط مؤقت، حاول بعد قليل");
+      }
       await new Promise((r) => setTimeout(r, 2000 * 2 ** attempt)); // 2s, 4s, 8s
       continue;
     }
