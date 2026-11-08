@@ -45,7 +45,18 @@ function errorStatus(error: unknown): number | undefined {
   return value.cause ? errorStatus(value.cause) : undefined;
 }
 
-function retryDelay(error: unknown, attempt: number) {
+function retryDelay(response: Response, attempt: number) {
+  const retryAfter = response.headers.get("retry-after");
+  if (retryAfter) {
+    const seconds = Number(retryAfter);
+    if (Number.isFinite(seconds)) return Math.max(0, seconds * 1000);
+    const dateDelay = Date.parse(retryAfter) - Date.now();
+    if (Number.isFinite(dateDelay) && dateDelay > 0) return dateDelay;
+  }
+  return Math.min(1000 * 2 ** attempt + Math.floor(Math.random() * 500), 8000);
+}
+
+function retryDelayForError(error: unknown, attempt: number) {
   if (error && typeof error === "object") {
     const value = error as { retryAfterMs?: unknown; responseHeaders?: HeadersInit };
     if (typeof value.retryAfterMs === "number" && value.retryAfterMs > 0) return value.retryAfterMs;
@@ -59,7 +70,7 @@ function retryDelay(error: unknown, attempt: number) {
       }
     }
   }
-  return Math.min(1000 * 2 ** attempt, 8000);
+  return Math.min(1000 * 2 ** attempt + Math.floor(Math.random() * 500), 8000);
 }
 
 function userFacingAIError(error: unknown) {
@@ -70,6 +81,45 @@ function userFacingAIError(error: unknown) {
   if (status === 403 && error instanceof Error) return error.message;
   if (status && status >= 500) return "خدمة الذكاء الاصطناعي مشغولة مؤقتًا. حاول لاحقًا.";
   return "تعذّر إكمال طلب الذكاء الاصطناعي. حاول لاحقًا.";
+}
+
+export async function generateDeepText(
+  gateway: ReturnType<typeof createDeepReasoningGateway>,
+  instructions: string,
+  userContent: ModelMessage["content"],
+): Promise<string> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    const result = streamText({
+      model: gateway.model,
+      instructions,
+      messages: [{ role: "user", content: userContent }],
+      output: Output.text(),
+      maxRetries: 0,
+      providerOptions: {
+        openai: {
+          forceReasoning: true,
+          reasoningEffort: "medium",
+          reasoningSummary: "auto",
+          store: false,
+          include: ["reasoning.encrypted_content"],
+        },
+      },
+    });
+
+    try {
+      return await result.text;
+    } catch (error) {
+      lastError = error;
+      const status = errorStatus(error);
+      if ((status === 429 || (status !== undefined && status >= 500)) && attempt < 3) {
+        await new Promise((resolve) => setTimeout(resolve, retryDelayForError(error, attempt)));
+        continue;
+      }
+      throw new Error(userFacingAIError(error));
+    }
+  }
+  throw new Error(userFacingAIError(lastError));
 }
 
 export async function generateDeepStructured<TSchema extends z.ZodType>(
@@ -96,7 +146,6 @@ export async function generateDeepStructured<TSchema extends z.ZodType>(
         },
       },
     });
-
     try {
       return await result.output;
     } catch (error) {
@@ -107,17 +156,28 @@ export async function generateDeepStructured<TSchema extends z.ZodType>(
           const recovered = schema.safeParse(JSON.parse(text));
           if (recovered.success) return recovered.data;
         } catch {
-          // Keep the failed structured output as a clear, non-retryable validation error.
+          // Preserve a clean schema error instead of exposing provider internals.
         }
         throw new Error("تعذّر التحقق من صيغة الاستجابة. حاول مرة أخرى.");
       }
       const status = errorStatus(error);
       if ((status === 429 || (status !== undefined && status >= 500)) && attempt < 3) {
-        await new Promise((resolve) => setTimeout(resolve, retryDelay(error, attempt)));
+        await new Promise((resolve) => setTimeout(resolve, retryDelayForError(error, attempt)));
         continue;
       }
       throw new Error(userFacingAIError(error));
     }
   }
   throw new Error(userFacingAIError(lastError));
+}
+
+export async function gatewayFetchWithRetry(input: RequestInfo | URL, init?: RequestInit) {
+  for (let attempt = 0; ; attempt += 1) {
+    const response = await fetch(input, init);
+    const retryable = response.status === 429 || response.status >= 500;
+    if (!retryable || attempt >= 3) return response;
+    const delay = retryDelay(response, attempt);
+    await response.body?.cancel().catch(() => undefined);
+    await new Promise((resolve) => setTimeout(resolve, delay));
+  }
 }

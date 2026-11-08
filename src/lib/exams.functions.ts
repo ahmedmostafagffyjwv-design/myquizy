@@ -1,18 +1,15 @@
 import { createServerFn } from "@tanstack/react-start";
+import { getRequest } from "@tanstack/react-start/server";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { generateText, generateObject } from "ai";
 import { z } from "zod";
-import { createLovableAiGatewayProvider } from "./ai-gateway.server";
+import { createDeepReasoningGateway, createLovableAiGatewayProvider, generateDeepStructured, generateDeepText } from "./ai-gateway.server";
 import { distributionCounts } from "./question-distribution";
-import { geminiGenerate, GeminiQuotaError, QUOTA_MESSAGE } from "./gemini.server";
-import { ANALYSIS_MODEL, GENERATION_MODEL, VERIFY_MODEL } from "./ai-models";
+import { FAST_MODEL } from "./ai-models";
+import { outputLanguageLabel, resolveOutputLanguage, type ExamOutputLanguage } from "./ai-language";
 
-const MODEL = "google/gemini-2.5-flash";
-
-function getGateway() {
-  const key = process.env.LOVABLE_API_KEY;
-  if (!key) throw new Error("LOVABLE_API_KEY missing");
-  return createLovableAiGatewayProvider(key);
+function getGateway(key: string, request?: Request) {
+  return createLovableAiGatewayProvider(key, request);
 }
 
 // ---------- OCR an uploaded image (base64) ----------
@@ -25,13 +22,15 @@ export const ocrImage = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => OcrInput.parse(d))
   .handler(async ({ data }) => {
-    const gateway = getGateway();
+    const key = process.env["LOVABLE_API_KEY"];
+    if (!key) throw new Error("LOVABLE_API_KEY غير مُعدّ في أسرار المشروع");
+    const gateway = getGateway(key, getRequest());
     const dataUrl = data.imageBase64.startsWith("data:")
       ? data.imageBase64
       : `data:${data.mimeType};base64,${data.imageBase64}`;
 
     const { text } = await generateText({
-      model: gateway(MODEL),
+      model: gateway(FAST_MODEL),
       messages: [
         {
           role: "user",
@@ -75,6 +74,7 @@ const GenInput = z.object({
   unitId: z.string().uuid().optional(),
   lessonId: z.string().uuid().optional(),
   referenceExamId: z.string().uuid().optional(),
+  outputLanguage: z.enum(["source", "ar", "en"]).default("source"),
 });
 
 const ManualQuestionAssistInput = z.object({
@@ -102,6 +102,32 @@ const questionSchema = z.object({
 
 const examSchema = z.object({
   questions: z.array(questionSchema),
+});
+
+const generatedQuestionSchema = z.object({
+  type: z.enum(["mcq", "essay"]),
+  difficulty: z.enum(["easy", "medium", "hard"]),
+  question_text: z.string(),
+  options: z.array(z.string()),
+  correct_answer: z.string(),
+  explanation: z.string(),
+  source_excerpt: z.string(),
+  image_url: z.string().nullable(),
+  question_kind: z.enum(["analytical", "comprehension", "direct"]),
+  cognitive_level: z.enum(["remember", "understand", "apply", "analyze", "evaluate", "create"]),
+  complexity_level: z.enum(["basic", "intermediate", "advanced"]),
+  context_depth: z.enum(["shallow", "medium", "deep"]),
+  requires_integration: z.boolean(),
+});
+
+const generatedExamSchema = z.object({ questions: z.array(generatedQuestionSchema) });
+
+const verificationSchema = z.object({
+  results: z.array(z.object({
+    i: z.number(),
+    valid: z.boolean(),
+    corrected_answer: z.string().nullable(),
+  })),
 });
 
 const typeMap: Record<string, "mcq" | "essay"> = {
@@ -348,6 +374,10 @@ export const generateExam = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) => GenInput.parse(d))
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
+    const key = process.env["LOVABLE_API_KEY"];
+    if (!key) throw new Error("LOVABLE_API_KEY غير مُعدّ في أسرار المشروع");
+    const request = getRequest();
+    const deepGateway = createDeepReasoningGateway(key, request);
 
     // Fetch source
     const { data: src, error: srcErr } = await supabase
